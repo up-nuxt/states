@@ -225,7 +225,7 @@ describe('browser hydration', async () => {
     )
     await page.locator('#product-fail').click()
     await failedResponse
-    await expect(page.locator('#product-primary-status').textContent()).resolves.toBe('error')
+    await expect.poll(() => page.locator('#product-primary-status').textContent()).toBe('error')
     await expect(page.locator('#product-primary-error').textContent()).resolves.toBe('true')
     await expect(page.locator('#product-primary-count').textContent()).resolves.toBe('0')
 
@@ -235,7 +235,7 @@ describe('browser hydration', async () => {
     )
     await page.locator('#product-recover').click()
     await recoveredResponse
-    await expect(page.locator('#product-primary-status').textContent()).resolves.toBe('success')
+    await expect.poll(() => page.locator('#product-primary-status').textContent()).toBe('success')
     await expect(page.locator('#product-primary-error').textContent()).resolves.toBe('false')
     await expect(page.locator('#product-primary-count').textContent()).resolves.toBe('2')
     expect(apiRequests.some((request) => new URL(request).searchParams.get('fail') === '1')).toBe(
