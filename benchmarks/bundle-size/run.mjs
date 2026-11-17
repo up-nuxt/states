@@ -62,7 +62,7 @@ const result = {
   runtime: {
     node: process.version,
     nuxt: packageVersion('nuxt'),
-    nuxtState: packageVersion('nuxt-state'),
+    nuxtState: packageVersion('@up-nuxt/states'),
     piniaNuxt: packageVersion('@pinia/nuxt'),
     pinia: packageVersion('pinia'),
   },
@@ -121,7 +121,7 @@ function sumSizes(assets) {
 
 function packageVersion(name) {
   const packagePath =
-    name === 'nuxt-state'
+    name === '@up-nuxt/states'
       ? join(repositoryDir, 'package.json')
       : join(repositoryDir, 'node_modules', ...name.split('/'), 'package.json')
 

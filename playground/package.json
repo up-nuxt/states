@@ -1,5 +1,5 @@
 {
-  "name": "nuxt-state-playground",
+  "name": "@up-nuxt/states-playground",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "generate": "nuxt generate"
   },
   "dependencies": {
-    "nuxt": "^4.5.2",
-    "nuxt-state": "workspace:*"
+    "@up-nuxt/states": "workspace:*",
+    "nuxt": "^4.5.2"
   }
 }

@@ -1,12 +1,12 @@
 # Bundle-size benchmark
 
-This benchmark compares the production client JavaScript added by `nuxt-state`
+This benchmark compares the production client JavaScript added by `@up-nuxt/states`
 and `@pinia/nuxt` for the same small counter.
 
 It builds three Nuxt applications:
 
 - `baseline`: the same UI backed by Nuxt's built-in `useState`
-- `nuxt-state`: the UI backed by this repository's production package build
+- `@up-nuxt/states`: the UI backed by this repository's production package build
 - `pinia`: the UI backed by `@pinia/nuxt` and Pinia
 
 The report includes the total client JavaScript and the incremental cost over

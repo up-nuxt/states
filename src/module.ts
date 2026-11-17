@@ -15,7 +15,7 @@ export type ModuleOptions = Record<string, never>
 
 export default defineNuxtModule<ModuleOptions>({
   meta: {
-    name: 'nuxt-state',
+    name: '@up-nuxt/states',
     compatibility: {
       nuxt: '^4.0.0',
     },

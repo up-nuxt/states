@@ -75,7 +75,7 @@ describe('nuxt-state module', () => {
       expect(tabs).toContainEqual(
         expect.objectContaining({
           name: 'nuxt-state',
-          title: 'Nuxt State',
+          title: 'Nuxt States',
           view: { type: 'iframe', src: '/__nuxt_state_devtools__/' },
         }),
       )

@@ -11,7 +11,7 @@ const { message: layerMessage } = useDemoLayerState()
   <main :class="{ dark: darkMode }">
     <div class="shell">
       <header>
-        <p class="kicker">nuxt-state / experimental prototype</p>
+        <p class="kicker">@up-nuxt/states / playground</p>
         <h1>One factory.<br /><em>One Nuxt app.</em></h1>
         <p class="lede">
           The two counter cards call the same zero-argument composable. Their refs retain normal Vue

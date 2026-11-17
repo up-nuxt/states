@@ -6,7 +6,7 @@ export function registerDevtools(route: string, nuxt: Nuxt): void {
   addCustomTab(
     {
       name: 'nuxt-state',
-      title: 'Nuxt State',
+      title: 'Nuxt States',
       icon: 'carbon:data-vis-4',
       category: 'app',
       view: {

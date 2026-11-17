@@ -2,6 +2,9 @@
 
 ## 1.0.0
 
+- Publish as `@up-nuxt/states` under the up-nuxt organization.
+- Move the source repository to `https://github.com/up-nuxt/states`.
+
 - Stabilize `defineState(factory)` as the complete public API for the 1.x release line.
 - Declare the tested Nuxt 4 behavior from 0.1–0.3 production-ready: per-app lazy state,
   SSR hydration, Nuxt composables, Layers, and development-only read-only DevTools.

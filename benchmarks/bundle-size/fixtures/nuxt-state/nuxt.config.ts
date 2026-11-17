@@ -1,5 +1,5 @@
 export default defineNuxtConfig({
-  modules: ['nuxt-state'],
+  modules: ['@up-nuxt/states'],
   devtools: { enabled: false },
   sourcemap: false,
 })

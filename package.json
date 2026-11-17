@@ -1,5 +1,5 @@
 {
-  "name": "nuxt-state",
+  "name": "@up-nuxt/states",
   "version": "1.0.0",
   "description": "Define shared Nuxt state using the same Composition API you already use in composables.",
   "keywords": [
@@ -9,15 +9,15 @@
     "state",
     "vue"
   ],
-  "homepage": "https://github.com/up-nuxt/nuxt-state#readme",
+  "homepage": "https://github.com/up-nuxt/states#readme",
   "bugs": {
-    "url": "https://github.com/up-nuxt/nuxt-state/issues"
+    "url": "https://github.com/up-nuxt/states/issues"
   },
   "license": "MIT",
   "author": "Navid Talebian",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/up-nuxt/nuxt-state.git"
+    "url": "git+https://github.com/up-nuxt/states.git"
   },
   "workspaces": [
     "playground"
