@@ -149,7 +149,7 @@ See [architecture](./docs/architecture.md) for implementation details and the
 
 ## Development
 
-Requires Node.js 22+ and pnpm.
+Requires Node.js 24 or 26 and pnpm.
 
 ```bash
 pnpm install

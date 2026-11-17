@@ -1,4 +1,7 @@
 {
   "extends": "./.nuxt/tsconfig.json",
-  "exclude": ["benchmarks", "dist", "node_modules", "playground", "test/fixtures"]
+  "exclude": ["benchmarks", "dist", "node_modules", "playground", "test/fixtures"],
+  "compilerOptions": {
+    "target": "ESNext"
+  }
 }

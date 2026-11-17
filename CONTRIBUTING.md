@@ -11,7 +11,7 @@ public API or SSR guarantees.
 
 ## Setup
 
-Use Node.js 22+ and pnpm:
+Use Node.js 24 or 26 and pnpm:
 
 ```bash
 pnpm install

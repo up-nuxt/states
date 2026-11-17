@@ -6,9 +6,7 @@ const { user, label, login } = useUser()
   <section class="card card--wide">
     <span class="eyebrow">reactive() example</span>
     <h2>{{ label }}</h2>
-    <p>
-      Authentication: <strong>{{ user.authenticated ? 'active' : 'anonymous' }}</strong>
-    </p>
+    <p>Authentication: <strong>{{ user.authenticated ? 'active' : 'anonymous' }}</strong></p>
     <button
       type="button"
       :disabled="user.authenticated"

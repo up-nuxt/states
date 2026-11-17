@@ -9,6 +9,6 @@
   },
   "dependencies": {
     "@up-nuxt/states": "workspace:*",
-    "nuxt": "^4.5.2"
+    "nuxt": "^4.6.4"
   }
 }
