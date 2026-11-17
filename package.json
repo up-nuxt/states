@@ -9,15 +9,15 @@
     "state",
     "vue"
   ],
-  "homepage": "https://github.com/navidtm/nuxt-state#readme",
+  "homepage": "https://github.com/up-nuxt/nuxt-state#readme",
   "bugs": {
-    "url": "https://github.com/navidtm/nuxt-state/issues"
+    "url": "https://github.com/up-nuxt/nuxt-state/issues"
   },
   "license": "MIT",
   "author": "Navid Talebian",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/navidtm/nuxt-state.git"
+    "url": "git+https://github.com/up-nuxt/nuxt-state.git"
   },
   "workspaces": [
     "playground"

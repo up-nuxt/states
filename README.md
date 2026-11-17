@@ -2,6 +2,8 @@
 
 > Define shared Nuxt state with the Vue Composition API.
 
+Part of the [up-nuxt](https://github.com/up-nuxt) ecosystem.
+
 `nuxt-state` is a focused Nuxt 4 module. A composable created with `defineState` runs lazily
 once per Nuxt application and returns the same result to every caller in that app. Its stable
 1.x public API is `defineState(factory)`.
