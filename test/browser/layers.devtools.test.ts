@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rm, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { createPage, setup, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
@@ -110,6 +110,51 @@ describe('Nuxt Layers DevTools metadata', async () => {
       expect(inspected.active[0]?.members.find(({ name }) => name === 'count')?.value).toBe(5)
     } finally {
       await writeFile(layerCounterPath, originalSource)
+      await page.close()
+    }
+  })
+
+  it('refreshes known states when a project override is added, renamed, and removed', async () => {
+    const page = await createPage()
+    const overridePath = fileURLToPath(
+      new URL('../fixtures/layers/app/states/test-metadata-override.ts', import.meta.url),
+    )
+    const stateExport = (name: string) => `export const ${name} = defineState(() => ({}))\n`
+    const readOrigins = async () => {
+      await page.goto(url('/hydration'), { waitUntil: 'hydration' })
+      return page.evaluate(async () => {
+        const nuxt = window.useNuxtApp!() as unknown as {
+          callHook: (name: string, request: object) => Promise<void>
+        }
+        const request: { result?: { known: Array<{ name: string; origin: string }> } } = {}
+        await nuxt.callHook('nuxt-state:inspect', request)
+        return Object.fromEntries(request.result!.known.map(({ name, origin }) => [name, origin]))
+      })
+    }
+    const origins = async () => {
+      const states = await readOrigins()
+      return [states.useLayerSettings, states.useRenamedSettings]
+    }
+
+    try {
+      expect(await origins()).toEqual(['layers/1.base', undefined])
+
+      await writeFile(overridePath, stateExport('useLayerSettings'), { flag: 'wx' })
+      try {
+        await expect.poll(origins, { timeout: 8000, interval: 200 }).toEqual(['Project', undefined])
+
+        await writeFile(overridePath, stateExport('useRenamedSettings'))
+        await expect
+          .poll(origins, { timeout: 8000, interval: 200 })
+          .toEqual(['layers/1.base', 'Project'])
+      } finally {
+        await rm(overridePath)
+      }
+
+      await expect
+        .poll(origins, { timeout: 8000, interval: 200 })
+        .toEqual(['layers/1.base', undefined])
+    } finally {
       await page.close()
     }
   })

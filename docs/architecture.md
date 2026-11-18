@@ -124,12 +124,15 @@ concurrency, and HMR cases.
 
 ## DevTools
 
-The v0.3 integration uses the stable Nuxt DevTools 3 iframe API. In development, the module
-registers a read-only tab and an app hook that queries the existing per-app registry. It adds no
-public state endpoint, websocket, global registry, or eager factory execution.
+In development on Nuxt 4.6 or later, the module registers an iframe dock in the Nuxt group of
+DevTools v4. The iframe calls the inspection hook on the same-origin Nuxt app in its parent
+window. The hook queries the existing per-app registry and returns read-only previews.
+The dev-only route serves the iframe HTML through the portable `nuxt/server` API.
 
 Active entries show hydration status and bounded member previews. Static auto-import metadata
-separately lists export names, source paths, and layer origins. Nuxt exposes no stable mapping
+lists export names, source paths, and layer origins. The dock badge counts discovered exports.
+The metadata template declares the state directories as watched inputs for file edits.
+Nuxt exposes no stable mapping
 between generated runtime keys and static exports, so active entries use the internal key as a
 fallback label.
 

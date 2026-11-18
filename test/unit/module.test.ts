@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { getLayerDirectories, loadNuxt } from '@nuxt/kit'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import NuxtState from '../../src/module'
 
 describe('nuxt-state module', () => {
@@ -54,6 +54,7 @@ describe('nuxt-state module', () => {
       await nuxt.callHook('imports:dirs', registeredDirs)
 
       for (const layer of layers) {
+        expect(registeredDirs).toContain(`${layer.app}states`)
         expect(registeredDirs).toContain(`${layer.app}states/**`)
       }
     } finally {
@@ -61,7 +62,7 @@ describe('nuxt-state module', () => {
     }
   })
 
-  it('registers a stable DevTools iframe and bridge only in development', async () => {
+  it('registers a native DevTools dock and bridge in development', async () => {
     const nuxt = await loadNuxt({
       cwd: fileURLToPath(new URL('../fixtures/basic', import.meta.url)),
       dev: true,
@@ -69,14 +70,15 @@ describe('nuxt-state module', () => {
     })
 
     try {
-      const tabs: Array<Record<string, unknown>> = []
-      await nuxt.callHook('devtools:customTabs', tabs as never)
-
-      expect(tabs).toContainEqual(
+      const register = vi.fn(() => ({ update: vi.fn() }))
+      await nuxt.callHook('devtools:ready', { docks: { register } } as never)
+      expect(register).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({
-          name: 'nuxt-state',
+          id: 'nuxt-state',
           title: 'Nuxt States',
-          view: { type: 'iframe', src: '/__nuxt_state_devtools__/' },
+          groupId: 'nuxt',
+          type: 'iframe',
+          url: '/__nuxt_state_devtools__/',
         }),
       )
       expect(nuxt.options.devServerHandlers).toEqual(
@@ -101,10 +103,9 @@ describe('nuxt-state module', () => {
     })
 
     try {
-      const tabs: Array<Record<string, unknown>> = []
-      await nuxt.callHook('devtools:customTabs', tabs as never)
-
-      expect(tabs).not.toContainEqual(expect.objectContaining({ name: 'nuxt-state' }))
+      const register = vi.fn()
+      await nuxt.callHook('devtools:ready', { docks: { register } } as never)
+      expect(register).not.toHaveBeenCalled()
       expect(nuxt.options.devServerHandlers).not.toEqual(
         expect.arrayContaining([expect.objectContaining({ route: '/__nuxt_state_devtools__/' })]),
       )

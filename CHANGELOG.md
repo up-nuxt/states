@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0
+
+- Move the read-only Nuxt States inspector to the native DevTools v4 dock and show the number of
+  discovered state exports on its badge. The inspector requires Nuxt 4.6+ with Vite 8 and DevTools
+  v4.
+- Refresh inspector metadata when state exports and layer overrides change during development.
+- Serve the inspector through the portable `nuxt/server` API.
+
 ## 1.0.0
 
 - Publish as `@up-nuxt/states` under the up-nuxt organization.
