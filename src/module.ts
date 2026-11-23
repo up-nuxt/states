@@ -3,6 +3,7 @@ import {
   addDevServerHandler,
   addImports,
   addImportsDir,
+  addNitroPlugin,
   addPlugin,
   addTemplate,
   createResolver,
@@ -38,6 +39,7 @@ export default defineNuxtModule<ModuleOptions>({
     })
 
     addPlugin(resolver.resolve('./runtime/app/plugins/hydration'))
+    addNitroPlugin(resolver.resolve('./runtime/server/request-cleanup'))
 
     const devtools = nuxt.options.devtools
     const devtoolsEnabled =

@@ -39,6 +39,23 @@ describe('nuxt-state module', async () => {
     expect(second).not.toContain('data-after="first"')
   })
 
+  it.each([false, true])(
+    'disposes SSR scopes once the response is serialized (error: %s)',
+    async (fail) => {
+      const marker = fail ? 'cleanup-error-probe' : 'cleanup-success-probe'
+      const response = await fetch(`/?scope-cleanup=${marker}${fail ? '&fail' : ''}`)
+      expect(response.status).toBe(fail ? 503 : 200)
+      const html = await response.text()
+      if (!fail) {
+        expect(html).toContain(`"${marker}"`)
+        expect(html).not.toContain('disposed before serialization')
+      }
+      await expect
+        .poll(() => $fetch<string>(`/?scope-check=${marker}`))
+        .toContain('scope-disposals:1,scope-changes:0')
+    },
+  )
+
   it('serializes final SSR mutations in one namespaced payload', async () => {
     const html = await $fetch<string>('/hydration')
 

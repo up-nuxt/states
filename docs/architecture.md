@@ -14,7 +14,8 @@ implementation details and are not public API.
 Each `defineState` call owns a `WeakMap<NuxtApp, Instance>`. The factory runs lazily in a
 detached Vue effect scope and its exact result is reused within that app. This provides SSR
 request isolation while allowing discarded applications to be garbage-collected. The scope
-stops when the app unmounts.
+stops on Vue app unmount in the browser and after the Nitro response on the server. The server
+keeps scopes active through payload serialization.
 
 A second weak map holds per-app hydration records:
 

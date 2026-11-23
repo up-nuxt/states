@@ -1,5 +1,6 @@
-import { useNuxtApp } from '#app'
+import { useNuxtApp, useRequestEvent } from '#app'
 import { effectScope } from 'vue'
+import { registerRequestCleanup } from '../../shared/request-cleanup'
 import { registerHydratableState, type HydratableStateEntry } from '../state-registry'
 import { restoreState, snapshotState } from '../state-snapshot'
 
@@ -45,8 +46,13 @@ export function defineState<T>(factory: () => T & NotPromise<T>, internalKey?: s
       }
 
       instances.set(nuxtApp, instance)
-      const app = nuxtApp as { vueApp?: { onUnmount?: (cleanup: () => void) => void } }
-      app.vueApp?.onUnmount?.(dispose)
+      if (import.meta.server) {
+        const event = useRequestEvent(nuxtApp)
+        if (event) registerRequestCleanup(event.context, dispose)
+      } else {
+        const app = nuxtApp as { vueApp?: { onUnmount?: (cleanup: () => void) => void } }
+        app.vueApp?.onUnmount?.(dispose)
+      }
 
       if (internalKey) {
         const entry: HydratableStateEntry = {
