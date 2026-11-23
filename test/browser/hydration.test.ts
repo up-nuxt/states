@@ -175,6 +175,8 @@ describe('browser hydration', async () => {
     )
     await expect(page.locator('#set-value').textContent()).resolves.toBe('a,b')
     await expect(page.locator('#map-value').textContent()).resolves.toBe('a,1,b,2')
+    await expect(page.locator('#reactive-map-value').textContent()).resolves.toBe('42')
+    await expect(page.locator('#reactive-set-value').textContent()).resolves.toBe('true')
     await expect(page.locator('#array-value').textContent()).resolves.toBe('9')
     await expect(page.locator('#obsolete-value').textContent()).resolves.toBe('false')
     expect(browserMessages.filter((message) => /hydration|mismatch/i.test(message))).toEqual([])

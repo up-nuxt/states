@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { graph, selected } = useGraphState()
+const { graph, selected, liveMap, liveSet } = useGraphState()
 
 if (import.meta.server) {
   graph.a.value = 41
@@ -12,6 +12,8 @@ if (import.meta.server) {
     ['b', 2],
   ])
   graph.items.splice(0, graph.items.length, 9)
+  liveMap.set('server', 42)
+  liveSet.add(42)
   delete graph.obsolete
 }
 </script>
@@ -28,6 +30,8 @@ if (import.meta.server) {
     <output id="date-value">{{ graph.createdAt.toISOString() }}</output>
     <output id="set-value">{{ [...graph.tags].join(',') }}</output>
     <output id="map-value">{{ [...graph.values].flat().join(',') }}</output>
+    <output id="reactive-map-value">{{ liveMap.get('server') }}</output>
+    <output id="reactive-set-value">{{ liveSet.has(42) }}</output>
     <output id="array-value">{{ graph.items.join(',') }}</output>
     <output id="obsolete-value">{{ 'obsolete' in graph }}</output>
   </main>

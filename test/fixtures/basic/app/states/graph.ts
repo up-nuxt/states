@@ -21,5 +21,7 @@ export const useGraphState = defineState(() => {
   })
 
   const selected = ref(graph)
-  return { selected, graph }
+  const liveMap = reactive(new Map<string, number>())
+  const liveSet = shallowReactive(new Set<number>())
+  return { selected, graph, liveMap, liveSet }
 })

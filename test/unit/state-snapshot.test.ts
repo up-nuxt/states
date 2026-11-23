@@ -288,6 +288,43 @@ describe('state snapshots', () => {
     expect(state.a).toBe(state.b)
   })
 
+  it.each([reactive, shallowReactive])('hydrates returned collection roots with %s', (wrap) => {
+    const map = wrap(new Map<unknown, unknown>([['stale', 1]]))
+    const set = wrap(new Set<unknown>(['stale']))
+    const mapRef = ref(map)
+    const serverMap = new Map<unknown, unknown>()
+    const serverSet = new Set<unknown>()
+    serverMap.set('entries', serverSet)
+    serverMap.set(serverMap, 'self')
+    serverSet.add(serverMap)
+
+    restoreState(
+      { map, set, mapRef },
+      {
+        mapRef: { type: 'ref', value: serverMap },
+        map: { type: 'reactive', value: serverMap },
+        set: { type: 'reactive', value: serverSet },
+      },
+    )
+
+    expect(mapRef.value).toBe(map)
+    expect(map.get('entries')).toBe(set)
+    expect(map.get(map)).toBe('self')
+    expect(map.has('stale')).toBe(false)
+    expect([...set][0]).toBe(map)
+    expect(set.size).toBe(1)
+  })
+
+  it('keeps entries if a collection snapshot already shares the target', () => {
+    const map = reactive(new Map([['value', 42]]))
+    const set = reactive(new Set([42]))
+
+    restoreState({ map, set }, snapshotState({ map, set }))
+
+    expect([...map]).toEqual([['value', 42]])
+    expect([...set]).toEqual([42])
+  })
+
   it('restores cyclic objects without recursion overflow', () => {
     interface CyclicValue {
       value: string

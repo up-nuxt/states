@@ -71,7 +71,8 @@ mounting so HMR cannot replay the original server state.
 
 Classification uses public Vue APIs. Standard and shallow refs/reactives are supported;
 readonly values are skipped. Ref restoration assigns `.value`, while reactive roots are
-patched without replacing the proxy.
+patched without replacing the proxy. Returned reactive `Map` and `Set` members are
+repopulated in place, including shared references in entries.
 
 The patcher reuses compatible client arrays and plain objects, reconnects shared references
 and cycles, and splits nested client aliases when the server supplied distinct objects. Returned

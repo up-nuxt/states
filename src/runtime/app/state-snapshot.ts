@@ -66,11 +66,13 @@ function writeGraph(target: object, source: object, resolve: (value: unknown) =>
     }
     target.length = source.length
   } else if (target instanceof Map && source instanceof Map) {
+    const entries = toRaw(target) === source ? [...source] : source
     target.clear()
-    for (const [key, value] of source) target.set(resolve(key), resolve(value))
+    for (const [key, value] of entries) target.set(resolve(key), resolve(value))
   } else if (target instanceof Set && source instanceof Set) {
+    const values = toRaw(target) === source ? [...source] : source
     target.clear()
-    for (const value of source) target.add(resolve(value))
+    for (const value of values) target.add(resolve(value))
   } else if (isPlainRecord(target) && isPlainRecord(source)) {
     for (const key of Object.keys(target)) {
       if (!Object.hasOwn(source, key)) delete target[key]
@@ -174,7 +176,12 @@ export function restoreState(state: unknown, snapshot: unknown): void {
       !isReadonly(target)
     ) {
       const source = unwrapReactive(entry.value)
-      if (!isTrackableObject(source) || !canPatch(target, source) || claimed.has(toRaw(target))) {
+      if (!isTrackableObject(source) || claimed.has(toRaw(target))) continue
+      if (
+        !canPatch(target, source) &&
+        !(target instanceof Map && source instanceof Map) &&
+        !(target instanceof Set && source instanceof Set)
+      ) {
         continue
       }
       // Distinct factory roots keep their identities even if the payload aliases them.
