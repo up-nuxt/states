@@ -1,7 +1,11 @@
-import { computed, getCurrentScope, reactive, ref, watchEffect } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, reactive, ref, watchEffect } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineState } from '../../src/runtime/app/composables/defineState'
-import { collectStateSnapshots, receiveStateSnapshots } from '../../src/runtime/app/state-registry'
+import {
+  collectStateSnapshots,
+  getStateRegistry,
+  receiveStateSnapshots,
+} from '../../src/runtime/app/state-registry'
 import { setCurrentNuxtApp } from './nuxt-app-mock'
 
 const defineStateInternal = defineState as unknown as <T>(
@@ -164,4 +168,63 @@ describe('defineState', () => {
       '[@up-nuxt/states] State factories must be synchronous.',
     )
   })
+
+  it('disposes the scope when reading a factory result’s then property throws', () => {
+    const dispose = vi.fn()
+    const useBroken = defineState(() => {
+      onScopeDispose(dispose)
+      // oxlint-disable-next-line unicorn/no-thenable -- Exercise the Promise-like validation error path.
+      return Object.defineProperty({}, 'then', {
+        get() {
+          throw new Error('broken then')
+        },
+      })
+    })
+
+    expect(() => useBroken()).toThrow('broken then')
+    expect(dispose).toHaveBeenCalledOnce()
+  })
+
+  it.each([true, false])(
+    'retries a failed restore with a fresh instance (pending: %s)',
+    (pending) => {
+      const nuxtApp = {}
+      setCurrentNuxtApp(nuxtApp)
+      const snapshots = {
+        $counter: {
+          count: { type: 'ref', value: 41 },
+          other: { type: 'ref', value: 42 },
+        },
+      }
+      const dispose = vi.fn()
+      let attempts = 0
+      const useCounter = defineStateInternal(() => {
+        const attempt = ++attempts
+        onScopeDispose(dispose)
+        const other = ref(0)
+        return {
+          count: ref(0),
+          get other() {
+            if (attempt === 1) throw new Error('broken restore')
+            return other
+          },
+        }
+      }, '$counter')
+
+      if (pending) {
+        receiveStateSnapshots(nuxtApp, snapshots)
+        expect(() => useCounter()).toThrow('broken restore')
+      } else {
+        useCounter()
+        expect(() => receiveStateSnapshots(nuxtApp, snapshots)).toThrow('broken restore')
+      }
+
+      expect(dispose).toHaveBeenCalledOnce()
+      expect(getStateRegistry(nuxtApp).active.has('$counter')).toBe(false)
+      expect(getStateRegistry(nuxtApp).hydration.has('$counter')).toBe(true)
+      expect(useCounter().count.value).toBe(41)
+      expect(useCounter().other.value).toBe(42)
+      expect(attempts).toBe(2)
+    },
+  )
 })

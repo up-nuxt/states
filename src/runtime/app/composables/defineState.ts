@@ -29,49 +29,58 @@ export function defineState<T>(factory: () => T & NotPromise<T>, internalKey?: s
 
     const scope = effectScope(true)
     let instance: T
+    const dispose = () => {
+      if (Object.is(instances.get(nuxtApp), instance)) instances.delete(nuxtApp)
+      scope.stop()
+    }
 
     try {
       instance = scope.run(factory)!
+
+      if (isPromiseLike(instance)) {
+        throw new TypeError(
+          '[@up-nuxt/states] State factories must be synchronous. ' +
+            'Expose an async function from the state or use Nuxt data-fetching composables instead.',
+        )
+      }
+
+      instances.set(nuxtApp, instance)
+      const app = nuxtApp as { vueApp?: { onUnmount?: (cleanup: () => void) => void } }
+      app.vueApp?.onUnmount?.(dispose)
+
+      if (internalKey) {
+        const entry: HydratableStateEntry = {
+          snapshot: () => snapshotState(instance),
+          restore: (snapshot) => restoreState(instance, snapshot),
+          dispose,
+        }
+
+        if (import.meta.dev) {
+          entry.debug = {
+            state: instance,
+            hydration: import.meta.server ? 'Server' : 'Client-only',
+          }
+          const restore = entry.restore
+          entry.restore = (snapshot) => {
+            restore(snapshot)
+            entry.debug!.hydration = 'Hydrated'
+          }
+        }
+
+        registerHydratableState(nuxtApp, internalKey, entry)
+      }
+
+      return instance
     } catch (error) {
-      scope.stop()
+      try {
+        dispose()
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Failed to initialize and dispose Nuxt state',
+        )
+      }
       throw error
     }
-
-    if (isPromiseLike(instance)) {
-      scope.stop()
-      throw new TypeError(
-        '[@up-nuxt/states] State factories must be synchronous. ' +
-          'Expose an async function from the state or use Nuxt data-fetching composables instead.',
-      )
-    }
-
-    instances.set(nuxtApp, instance)
-
-    const app = nuxtApp as { vueApp?: { onUnmount?: (cleanup: () => void) => void } }
-    app.vueApp?.onUnmount?.(() => scope.stop())
-
-    if (internalKey) {
-      const entry: HydratableStateEntry = {
-        snapshot: () => snapshotState(instance),
-        restore: (snapshot) => restoreState(instance, snapshot),
-        dispose: () => scope.stop(),
-      }
-
-      if (import.meta.dev) {
-        entry.debug = {
-          state: instance,
-          hydration: import.meta.server ? 'Server' : 'Client-only',
-        }
-        const restore = entry.restore
-        entry.restore = (snapshot) => {
-          restore(snapshot)
-          entry.debug!.hydration = 'Hydrated'
-        }
-      }
-
-      registerHydratableState(nuxtApp, internalKey, entry)
-    }
-
-    return instance
   }
 }

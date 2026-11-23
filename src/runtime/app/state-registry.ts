@@ -40,14 +40,9 @@ export function registerHydratableState(
   entry: HydratableStateEntry,
 ): void {
   const registry = getStateRegistry(nuxtApp)
+  restorePendingSnapshot(registry, key, entry)
   registry.active.get(key)?.dispose?.()
   registry.active.set(key, entry)
-
-  if (registry.hydration.has(key)) {
-    const snapshot = registry.hydration.get(key)
-    registry.hydration.delete(key)
-    entry.restore(snapshot)
-  }
 }
 
 export function collectStateSnapshots(nuxtApp: object): StateHydrationPayload {
@@ -68,12 +63,29 @@ export function receiveStateSnapshots(
   registry.hydration = new Map(Object.entries(snapshots ?? {}))
 
   for (const [key, entry] of registry.active) {
-    if (!registry.hydration.has(key)) continue
-
-    const snapshot = registry.hydration.get(key)
-    registry.hydration.delete(key)
-    entry.restore(snapshot)
+    try {
+      restorePendingSnapshot(registry, key, entry)
+    } catch (error) {
+      registry.active.delete(key)
+      try {
+        entry.dispose?.()
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'Failed to restore and dispose Nuxt state')
+      }
+      throw error
+    }
   }
+}
+
+function restorePendingSnapshot(
+  registry: StateRegistry,
+  key: string,
+  entry: HydratableStateEntry,
+): void {
+  if (!registry.hydration.has(key)) return
+
+  entry.restore(registry.hydration.get(key))
+  registry.hydration.delete(key)
 }
 
 export function clearPendingStateSnapshots(nuxtApp: object): void {
