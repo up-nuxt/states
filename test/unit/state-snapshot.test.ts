@@ -231,6 +231,14 @@ describe('state snapshots', () => {
     expect('obsolete' in state).toBe(false)
   })
 
+  it('removes stale own properties even when the source prototype has the same name', () => {
+    const state = reactive({ toString: 'client' })
+
+    restoreState({ state }, { state: { type: 'reactive', value: {} } })
+
+    expect(Object.hasOwn(state, 'toString')).toBe(false)
+  })
+
   it('preserves Date, Map, and Set values through restoration', () => {
     const state = reactive({
       createdAt: new Date('2000-01-01T00:00:00.000Z'),

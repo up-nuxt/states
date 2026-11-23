@@ -82,7 +82,7 @@ function patchValue(target: unknown, source: unknown, seen: WeakMap<object, unkn
   if (!isPlainRecord(target) || !isPlainRecord(source)) return source
 
   for (const key of Object.keys(target)) {
-    if (!(key in source)) delete target[key]
+    if (!Object.hasOwn(source, key)) delete target[key]
   }
 
   for (const [key, value] of Object.entries(source)) {
