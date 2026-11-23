@@ -311,6 +311,80 @@ describe('state snapshots', () => {
     expect(state.cycle.self).toBe(state.cycle)
   })
 
+  it.each([false, true])(
+    'links refs back to the reused reactive root (ref first: %s)',
+    (refFirst) => {
+      const user = reactive({ name: 'Client' })
+      const selected = ref(user)
+      const serverUser = { name: 'Server' }
+      const userSnapshot = { type: 'reactive', value: serverUser }
+      const selectedSnapshot = { type: 'ref', value: serverUser }
+
+      restoreState(
+        { user, selected },
+        refFirst
+          ? { selected: selectedSnapshot, user: userSnapshot }
+          : { user: userSnapshot, selected: selectedSnapshot },
+      )
+
+      expect(selected.value).toBe(user)
+      user.name = 'Updated'
+      expect(selected.value.name).toBe('Updated')
+    },
+  )
+
+  it('splits an aliased client branch when the payload has distinct objects', () => {
+    const shared = { value: 0 }
+    const state = reactive({ first: shared, second: shared })
+    const first = state.first
+
+    restoreState(
+      { state },
+      { state: { type: 'reactive', value: { first: { value: 1 }, second: { value: 2 } } } },
+    )
+
+    expect(state.first).toBe(first)
+    expect(state.first).not.toBe(state.second)
+    expect([state.first.value, state.second.value]).toEqual([1, 2])
+  })
+
+  it('relinks new branches and cycles without modifying the payload graph', () => {
+    const user = reactive({ name: 'Client' })
+    const detail = ref<{ people: Map<{ name: string }, unknown> }>()
+    const serverUser = { name: 'Server' }
+    const people = new Map<{ name: string }, unknown>()
+    const serverDetail = { people }
+    people.set(serverUser, serverDetail)
+
+    restoreState(
+      { user, detail },
+      {
+        user: { type: 'reactive', value: serverUser },
+        detail: { type: 'ref', value: serverDetail },
+      },
+    )
+
+    expect(detail.value!.people.keys().next().value).toBe(user)
+    expect(detail.value!.people.get(user)).toBe(detail.value)
+    expect(people.get(serverUser)).toBe(serverDetail)
+  })
+
+  it('reuses untouched payload objects even when it patches another reactive member', () => {
+    const state = reactive({ value: 0 })
+    const data = shallowRef()
+    const payloadData = { entries: [{ id: 1 }] }
+
+    restoreState(
+      { state, data },
+      {
+        state: { type: 'reactive', value: { value: 1 } },
+        data: { type: 'ref', value: payloadData },
+      },
+    )
+
+    expect(data.value).toBe(payloadData)
+  })
+
   it('keeps computed values and functions connected to hydrated state', () => {
     const count = ref(0)
     const double = computed(() => count.value * 2)

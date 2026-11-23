@@ -11,6 +11,7 @@ export const useGraphState = defineState(() => {
   const graph = reactive({
     a: shared,
     b: shared,
+    separate: shared,
     cycle,
     createdAt: new Date('2000-01-01T00:00:00.000Z'),
     tags: new Set(['client']),
@@ -19,5 +20,6 @@ export const useGraphState = defineState(() => {
     obsolete: true as boolean | undefined,
   })
 
-  return { graph }
+  const selected = ref(graph)
+  return { selected, graph }
 })

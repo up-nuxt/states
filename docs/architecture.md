@@ -64,7 +64,7 @@ type StateSnapshot = Record<
 ```
 
 Readonly values, functions, and plain runtime members are recreated instead of serialized.
-Matched snapshots are consumed immediately; unmatched initial snapshots are cleared after
+Matched snapshots are consumed after a successful restore. Unmatched snapshots are cleared after
 mounting so HMR cannot replay the original server state.
 
 ## Restore behavior
@@ -73,10 +73,11 @@ Classification uses public Vue APIs. Standard and shallow refs/reactives are sup
 readonly values are skipped. Ref restoration assigns `.value`, while reactive roots are
 patched without replacing the proxy.
 
-The patcher handles arrays and plain objects recursively, deletes stale properties, and uses
-a `WeakMap` to preserve shared references and terminate cycles. Revived `Date`, `Map`, `Set`,
-and other Nuxt-serializable non-plain values are assigned rather than traversed. Nuxt remains
-the only serializer.
+The patcher reuses compatible client arrays and plain objects, reconnects shared references
+and cycles, and splits nested client aliases when the server supplied distinct objects. Returned
+reactive roots retain their factory identity. Distinct returned roots therefore remain distinct
+even if the payload aliases them. Payload values shared with Nuxt's data cache are reused when
+their references need no rewriting. Nuxt remains the only serializer.
 
 Writable computed refs look like mutable refs through Vue's public APIs. Restoring one invokes
 its setter and may cause side effects; return its mutable source refs instead. Direct primitive,

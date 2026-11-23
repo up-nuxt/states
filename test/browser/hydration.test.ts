@@ -165,6 +165,9 @@ describe('browser hydration', async () => {
 
     await expect(page.locator('#shared-value').textContent()).resolves.toBe('41')
     await expect(page.locator('#shared-identity').textContent()).resolves.toBe('true')
+    await expect(page.locator('#root-identity').textContent()).resolves.toBe('true')
+    await expect(page.locator('#separate-values').textContent()).resolves.toBe('41:42')
+    await expect(page.locator('#separate-identity').textContent()).resolves.toBe('false')
     await expect(page.locator('#cycle-value').textContent()).resolves.toBe('server')
     await expect(page.locator('#cycle-identity').textContent()).resolves.toBe('true')
     await expect(page.locator('#date-value').textContent()).resolves.toBe(

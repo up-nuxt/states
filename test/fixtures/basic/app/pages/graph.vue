@@ -1,8 +1,9 @@
 <script setup lang="ts">
-const { graph } = useGraphState()
+const { graph, selected } = useGraphState()
 
 if (import.meta.server) {
   graph.a.value = 41
+  graph.separate = { value: 42 }
   graph.cycle.value = 'server'
   graph.createdAt = new Date('2026-01-02T03:04:05.000Z')
   graph.tags = new Set(['a', 'b'])
@@ -19,6 +20,9 @@ if (import.meta.server) {
   <main>
     <output id="shared-value">{{ graph.b.value }}</output>
     <output id="shared-identity">{{ graph.a === graph.b }}</output>
+    <output id="root-identity">{{ selected === graph }}</output>
+    <output id="separate-values">{{ graph.a.value }}:{{ graph.separate.value }}</output>
+    <output id="separate-identity">{{ graph.a === graph.separate }}</output>
     <output id="cycle-value">{{ graph.cycle.value }}</output>
     <output id="cycle-identity">{{ graph.cycle.self === graph.cycle }}</output>
     <output id="date-value">{{ graph.createdAt.toISOString() }}</output>
