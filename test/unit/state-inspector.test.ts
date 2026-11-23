@@ -101,6 +101,33 @@ describe('development state inspector', () => {
     ).toEqual({ unavailable: 'proxy failed' })
   })
 
+  it('reads only the previewed items from large Maps and Sets', () => {
+    const values = Array.from({ length: 1_000 }, (_, index) => index)
+    const map = new Map(values.map((value) => [value, value]))
+    const set = new Set(values)
+    const mapIterator = map.entries()
+    const setIterator = set.values()
+    const mapNext = vi.spyOn(mapIterator, 'next')
+    const setNext = vi.spyOn(setIterator, 'next')
+    vi.spyOn(map, 'entries').mockReturnValue(mapIterator)
+    vi.spyOn(set, Symbol.iterator).mockReturnValue(setIterator)
+
+    expect(previewValue(map)).toMatchObject({
+      preview: {
+        type: 'Map',
+        entries: values.slice(0, 40).map((value) => [value, value]),
+        total: 1_000,
+      },
+      truncated: true,
+    })
+    expect(previewValue(set)).toMatchObject({
+      preview: { type: 'Set', values: values.slice(0, 40), total: 1_000 },
+      truncated: true,
+    })
+    expect(mapNext).toHaveBeenCalledTimes(40)
+    expect(setNext).toHaveBeenCalledTimes(40)
+  })
+
   it('reflects current values on demand without watchers', () => {
     const nuxtApp = {}
     const count = ref(1)

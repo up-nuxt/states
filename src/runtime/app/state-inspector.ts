@@ -103,6 +103,15 @@ function inspectMembers(state: unknown): StateInspectorMember[] {
   }
 }
 
+function takePreviewItems<T>(items: Iterable<T>): T[] {
+  const preview: T[] = []
+  for (const item of items) {
+    preview.push(item)
+    if (preview.length === MAX_ITEMS) break
+  }
+  return preview
+}
+
 function visit(value: unknown, depth: number, context: PreviewContext): unknown {
   if (typeof value === 'string') {
     if (value.length <= MAX_STRING) return value
@@ -134,25 +143,26 @@ function visit(value: unknown, depth: number, context: PreviewContext): unknown 
     }
   }
   if (raw instanceof Map) {
-    const items = [...raw.entries()]
-    if (items.length > MAX_ITEMS) context.truncated = true
+    const truncated = raw.size > MAX_ITEMS
+    if (truncated) context.truncated = true
     return {
       id: `#${id}`,
       type: 'Map',
-      entries: items
-        .slice(0, MAX_ITEMS)
-        .map(([key, item]) => [visit(key, depth + 1, context), visit(item, depth + 1, context)]),
-      ...(items.length > MAX_ITEMS ? { truncated: true, total: items.length } : {}),
+      entries: takePreviewItems(raw.entries()).map(([key, item]) => [
+        visit(key, depth + 1, context),
+        visit(item, depth + 1, context),
+      ]),
+      ...(truncated ? { truncated: true, total: raw.size } : {}),
     }
   }
   if (raw instanceof Set) {
-    const items = [...raw]
-    if (items.length > MAX_ITEMS) context.truncated = true
+    const truncated = raw.size > MAX_ITEMS
+    if (truncated) context.truncated = true
     return {
       id: `#${id}`,
       type: 'Set',
-      values: items.slice(0, MAX_ITEMS).map((item) => visit(item, depth + 1, context)),
-      ...(items.length > MAX_ITEMS ? { truncated: true, total: items.length } : {}),
+      values: takePreviewItems(raw).map((item) => visit(item, depth + 1, context)),
+      ...(truncated ? { truncated: true, total: raw.size } : {}),
     }
   }
   if (Array.isArray(raw)) {
