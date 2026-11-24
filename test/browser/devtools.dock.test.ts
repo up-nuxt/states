@@ -65,6 +65,20 @@ describe('Nuxt DevTools v4 dock', async () => {
       await filter.fill('')
       await expect.poll(() => count.isVisible()).toBe(true)
       await expect(page.locator('#devtools-lazy-calls').textContent()).resolves.toBe('0')
+
+      await filter.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      await page.locator('#devtools-increment').click()
+      await filter.evaluate(() => new Promise((resolve) => setTimeout(resolve, 1_100)))
+      await expect(count.textContent()).resolves.toBe('5')
+
+      await filter.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      await expect.poll(() => count.textContent()).toBe('6')
     } finally {
       await page.close()
     }

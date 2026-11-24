@@ -72,12 +72,14 @@ function renderDevtoolsView(): string {
     let page = 0
     let pages = 1
     let visible = true
+    let disposed = false
     let refreshing = false
     let previousKnown
     let previousQuery
 
     const escapeHTML = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
     const search = () => filter.value.trim().toLowerCase()
+    const canRefresh = () => visible && !document.hidden && !disposed
     const renderKnown = (knownStates, query) => {
       if (knownStates === previousKnown && query === previousQuery) return
       const known = knownStates.filter(state => (state.name + ' ' + state.source + ' ' + state.origin).toLowerCase().includes(query))
@@ -99,7 +101,7 @@ function renderDevtoolsView(): string {
       pageLabel.textContent = 'Page ' + (page + 1) + ' of ' + pages
     }
     const refresh = async () => {
-      if (!visible || refreshing) return
+      if (!canRefresh() || refreshing) return
       refreshing = true
       const query = search()
       const requestedPage = page
@@ -108,7 +110,7 @@ function renderDevtoolsView(): string {
         if (!host?.nuxt) throw new Error('Nuxt DevTools host is not connected.')
         const request = { query, page: requestedPage, result: undefined }
         await host.nuxt.callHook('nuxt-state:inspect', request)
-        if (!visible || query !== search() || requestedPage !== page) return
+        if (!canRefresh() || query !== search() || requestedPage !== page) return
         const { active = [], known = [], total = 0, pageSize = 1 } = request.result || {}
         pages = Math.max(1, Math.ceil(total / pageSize))
         if (page >= pages) {
@@ -117,7 +119,7 @@ function renderDevtoolsView(): string {
         }
         render(active, known, query)
       } catch (error) {
-        if (visible && query === search() && requestedPage === page) {
+        if (canRefresh() && query === search() && requestedPage === page) {
           activeRoot.innerHTML = '<p class="error">' + escapeHTML(error?.message || error) + '</p>'
           knownRoot.replaceChildren()
           previousKnown = undefined
@@ -137,8 +139,17 @@ function renderDevtoolsView(): string {
     previous.addEventListener('click', () => { if (page > 0) { page--; refresh() } })
     next.addEventListener('click', () => { if (page + 1 < pages) { page++; refresh() } })
     document.querySelector('#refresh').addEventListener('click', refresh)
+    document.addEventListener('visibilitychange', refresh)
     const timer = setInterval(refresh, 1000)
-    addEventListener('pagehide', () => { clearInterval(timer); observer.disconnect() }, { once: true })
+    addEventListener('pageshow', refresh)
+    addEventListener('pagehide', (event) => {
+      if (event.persisted) return
+      disposed = true
+      clearInterval(timer)
+      observer.disconnect()
+      document.removeEventListener('visibilitychange', refresh)
+      removeEventListener('pageshow', refresh)
+    })
     refresh()
   </script>
 </body>
