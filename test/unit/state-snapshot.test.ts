@@ -296,6 +296,49 @@ describe('state snapshots', () => {
     expect(member.count).toBe(2)
   })
 
+  it.each([reactive, shallowReactive])(
+    'keeps arrays stable and notifies only for changed slots',
+    (wrap) => {
+      const array = wrap([1, 2, 3])
+      const observed = vi.fn()
+      const stop = watchEffect(() => observed([...array]), { flush: 'sync' })
+      const apply = (value: number[]) =>
+        restoreState({ array }, { array: { type: 'reactive', value } })
+
+      try {
+        apply([1, 2, 3])
+        expect(observed.mock.calls).toEqual([[[1, 2, 3]]])
+        observed.mockClear()
+        apply([1, 2, 4])
+        expect(observed.mock.calls).toEqual([[[1, 2, 4]]])
+        apply([7, 6, 5])
+        expect(array).toEqual([7, 6, 5])
+      } finally {
+        stop()
+      }
+    },
+  )
+
+  it.each([reactive, shallowReactive])(
+    'matches Vue Set insertion semantics for wrapped members',
+    (wrap) => {
+      const raw = { count: 1 }
+      const readonlyMember = readonly(raw)
+      const reactiveMember = reactive(raw)
+      const value = new Set([readonlyMember, raw, reactiveMember])
+      const set = wrap(new Set([raw, { count: 0 }]))
+      const expected = wrap(new Set())
+      for (const member of value) expected.add(member)
+
+      restoreState({ set }, { set: { type: 'reactive', value } })
+
+      expect([...toRaw(set)]).toHaveLength(toRaw(expected).size)
+      for (const [index, member] of [...toRaw(expected)].entries()) {
+        expect([...toRaw(set)][index]).toBe(member)
+      }
+    },
+  )
+
   it.each([reactive, shallowReactive])('keeps Set order and only changes its tail', (wrap) => {
     const set = wrap(new Set<unknown>([0, NaN, 'a']))
     const observe = vi.fn()
