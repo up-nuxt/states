@@ -8,6 +8,7 @@ import {
   readonly,
   ref,
   shallowReactive,
+  shallowReadonly,
   shallowRef,
   toRaw,
   watchEffect,
@@ -199,6 +200,28 @@ describe('state snapshots', () => {
       roles: ['admin', 'developer'],
     })
   })
+
+  it.each([readonly, shallowReadonly, Object.freeze])(
+    'replaces an immutable client branch with its server value and reconnects aliases (%s)',
+    (wrap) => {
+      const initial = wrap({ count: 0 })
+      const state = reactive({ nested: initial })
+      const alias = shallowRef()
+      const server = { count: 41 }
+
+      restoreState(
+        { state, alias },
+        {
+          state: { type: 'reactive', value: { nested: server } },
+          alias: { type: 'ref', value: server },
+        },
+      )
+
+      expect(state.nested.count).toBe(41)
+      expect(toRaw(state.nested)).toBe(toRaw(alias.value))
+      expect(initial.count).toBe(0)
+    },
+  )
 
   it('handles array growth, shrinkage, replacement, null, undefined, and deletion', () => {
     const state = reactive({

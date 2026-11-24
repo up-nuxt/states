@@ -356,7 +356,13 @@ export function restoreState(state: unknown, snapshot: unknown): void {
       const raw = toRaw(value)
       if (bindings.has(raw)) continue
       const current = (target as Record<string, unknown>)[key]
-      if (isTrackableObject(current) && !claimed.has(toRaw(current)) && canPatch(current, raw)) {
+      if (
+        isTrackableObject(current) &&
+        !isReadonly(current) &&
+        !claimed.has(toRaw(current)) &&
+        canPatch(current, raw) &&
+        !Object.isFrozen(toRaw(current))
+      ) {
         claim(current, raw)
       }
     }
