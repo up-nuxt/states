@@ -1,6 +1,6 @@
 {
   "name": "@up-nuxt/states",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Define shared Nuxt state using the same Composition API you already use in composables.",
   "keywords": [
     "composable",

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.1
+
+- Dispose SSR state scopes when Node responses finish or close, including errors and aborted
+  requests. Allow a fresh initialization after a failed hydration restore.
+- Preserve shared references, cycles, independent reactive roots, and sparse array slots during
+  hydration. Restore readonly and frozen nested branches through their mutable parents.
+- Avoid redundant reactive collection writes, omit empty snapshots, and look up pending snapshots
+  by state key as they are needed.
+- Filter and paginate DevTools states before generating previews. Bound getter reads, pause
+  polling while the panel is hidden, and label states without a transferable snapshot accurately.
+- Add a deterministic 200-request SSR isolation test and reproducible runtime, memory, and
+  production bundle benchmarks.
+
 ## 1.1.0
 
 - Move the read-only Nuxt States inspector to the native DevTools v4 dock and show the number of
