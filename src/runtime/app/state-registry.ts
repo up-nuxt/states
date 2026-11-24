@@ -9,7 +9,7 @@ export interface HydratableStateEntry {
     name?: string
     source?: string
     origin?: string
-    hydration: 'Hydrated' | 'Client-only' | 'Server'
+    hydration: 'Hydrated' | 'No snapshot' | 'Server'
   }
 }
 

@@ -12,7 +12,7 @@ export interface StateInspectorEntry {
   name: string
   source?: string
   origin?: string
-  hydration: 'Hydrated' | 'Client-only' | 'Server'
+  hydration: 'Hydrated' | 'No snapshot' | 'Server'
   members: StateInspectorMember[]
   totalMembers: number
 }

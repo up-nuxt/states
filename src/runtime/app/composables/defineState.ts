@@ -64,7 +64,7 @@ export function defineState<T>(factory: () => T & NotPromise<T>, internalKey?: s
         if (import.meta.dev) {
           entry.debug = {
             state: instance,
-            hydration: import.meta.server ? 'Server' : 'Client-only',
+            hydration: import.meta.server ? 'Server' : 'No snapshot',
           }
           const restore = entry.restore
           entry.restore = (snapshot) => {

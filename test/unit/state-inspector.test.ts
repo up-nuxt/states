@@ -14,7 +14,7 @@ function registerDebugState(
   nuxtApp: object,
   key: string,
   state: unknown,
-  hydration: 'Hydrated' | 'Client-only' | 'Server' = 'Client-only',
+  hydration: 'Hydrated' | 'No snapshot' | 'Server' = 'No snapshot',
 ): void {
   const debug = { state, hydration }
   registerHydratableState(nuxtApp, key, {
@@ -246,7 +246,7 @@ describe('development state inspector', () => {
     expect(inspected[0]?.members[0]?.value).toBe(2)
   })
 
-  it('reports hydrated and client-only states accurately', () => {
+  it('reports hydrated states and states without a snapshot accurately', () => {
     const nuxtApp = {}
     receiveStateSnapshots(nuxtApp, { $hydrated: { count: 1 } })
     registerDebugState(nuxtApp, '$hydrated', { count: ref(1) })
@@ -256,7 +256,7 @@ describe('development state inspector', () => {
       inspectActiveStates(nuxtApp).active.map(({ key, hydration }) => [key, hydration]),
     ).toEqual([
       ['$hydrated', 'Hydrated'],
-      ['$client', 'Client-only'],
+      ['$client', 'No snapshot'],
     ])
   })
 })

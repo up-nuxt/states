@@ -117,7 +117,7 @@ describe('development hydration', async () => {
         const result = (await inspect()) as typeof initial
         return result.active.map(({ hydration }) => hydration).sort()
       })
-      .toEqual(['Client-only', 'Hydrated'])
+      .toEqual(['Hydrated', 'No snapshot'])
 
     await page.locator('#devtools-back').click()
     await page.waitForURL('**/devtools')
@@ -132,6 +132,15 @@ describe('development hydration', async () => {
     const view = await page.request.get(url('/__nuxt_state_devtools__/'))
     expect(view.status()).toBe(200)
     expect(await view.text()).toContain('Read only')
+
+    await page.goto(url('/private-state'), { waitUntil: 'hydration' })
+    await expect(page.locator('#private-double').textContent()).resolves.toBe('0')
+    await expect
+      .poll(async () => {
+        const result = (await inspect()) as typeof initial | undefined
+        return result?.active.map(({ hydration }) => hydration)
+      })
+      .toEqual(['No snapshot'])
 
     await page.close()
   })
