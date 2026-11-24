@@ -1,6 +1,6 @@
 # Architecture
 
-This document summarizes the implementation through v1.0.0. The stable public API is:
+The stable public API in v1.x is:
 
 ```ts
 defineState(factory)
@@ -17,6 +17,10 @@ request isolation while allowing discarded applications to be garbage-collected.
 stops on Vue app unmount in the browser and when Nitro completes or closes a response on the
 server. Scopes remain active through payload serialization for completed responses. A scope
 created after a connection closes is stopped immediately.
+
+On adapters without a Node response, cleanup relies on Nitro's `afterResponse` hook. The Node
+matrix covers completed, failed, and aborted requests. Abort cleanup on Edge adapters requires
+adapter-specific verification.
 
 A second weak map holds per-app hydration records:
 
@@ -80,8 +84,10 @@ only the tail.
 
 The patcher reuses compatible client arrays and plain objects, reconnects shared references
 and cycles, and splits nested client aliases when the server supplied distinct objects. Returned
-reactive roots retain their factory identity. When distinct returned roots share one payload
-object, each root gets its own self-references, including back-references through nested containers.
+reactive roots retain their factory identity. A readonly or frozen nested value is replaced
+through its mutable parent using the server value. When distinct returned roots share one
+payload object, each root gets its own self-references, including back-references through
+nested containers.
 References from other state members to that payload object resolve to the first compatible
 reactive root in snapshot order. Payload values shared with Nuxt's data cache are reused when
 their references need no rewriting. Nuxt remains the only serializer.
@@ -140,6 +146,8 @@ The dev-only route serves the iframe HTML through the portable `nuxt/server` API
 
 Active entries show hydration status and bounded member previews. Static auto-import metadata
 lists export names, source paths, and layer origins. The dock badge counts discovered exports.
+The `No snapshot` status covers both states initialized only in the browser and states whose SSR
+factory exposed no transferable members.
 The metadata template declares the state directories as watched inputs for file edits.
 Nuxt exposes no stable mapping
 between generated runtime keys and static exports, so active entries use the internal key as a
@@ -149,6 +157,9 @@ Preview generation limits depth, item count, node count, and string length; repr
 shared references, collections, and functions safely; and contains getter/proxy errors. The view
 polls once per second while visible and installs no deep watcher. It filters active entries by
 name or key and generates member previews only for the current page of up to 20 states.
+Each state shows up to 40 members. Each member preview visits at most 200 values, including
+scalars. Counting enumerable object keys still scales with object width, and a synchronous
+getter that has already started runs on the app's main thread.
 
 All registration, UI, metadata, inspector imports, and debug references are gated by development
 mode. Production builds contain no DevTools route, polling, bridge, or inspector code.
@@ -165,3 +176,6 @@ mode. Production builds contain no DevTools route, polling, bridge, or inspector
 The test suite verifies keyed transformation, pre-mount restoration, request isolation,
 graph-aware restoration, Nuxt composable behavior, browser hydration, Layers, DevTools safety,
 production exclusion, and public one-argument declarations.
+
+The [runtime audit baseline](../benchmarks/state-restore/README.md) records validation,
+timing, SSR memory, and production bundle measurements.

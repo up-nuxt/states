@@ -24,25 +24,11 @@ for (const name of fixtureNames) {
 
 const measurements = Object.fromEntries(
   fixtureNames.map((name) => {
-    const publicDir = join(benchmarkDir, 'fixtures', name, '.output/public')
-    const assets = findJavaScript(publicDir).map((path) => {
-      const contents = readFileSync(path)
+    const output = join(benchmarkDir, 'fixtures', name, '.output')
+    const client = measureJavaScript(join(output, 'public'), name === 'nuxt-state', false)
+    const server = measureJavaScript(join(output, 'server'), name === 'nuxt-state', true)
 
-      return {
-        file: relative(publicDir, path),
-        raw: contents.byteLength,
-        gzip: gzipSync(contents, { level: 9 }).byteLength,
-        brotli: brotliCompressSync(contents).byteLength,
-      }
-    })
-
-    return [
-      name,
-      {
-        assets,
-        total: sumSizes(assets),
-      },
-    ]
+    return [name, { ...client, server }]
   }),
 )
 
@@ -66,7 +52,7 @@ const result = {
     piniaNuxt: packageVersion('@pinia/nuxt'),
     pinia: packageVersion('pinia'),
   },
-  methodology: 'Production client JavaScript; compressed per asset; delta relative to baseline.',
+  methodology: 'Production JS, compressed per asset. Server totals exclude external node_modules.',
   comparison: {
     lighter: nuxtState.brotli <= pinia.brotli ? 'nuxt-state' : 'pinia',
     difference: {
@@ -88,6 +74,8 @@ for (const name of fixtureNames) {
 
 console.log('\nClient JavaScript bundle size (bytes)')
 console.table(rows)
+console.log('\nEmitted server JavaScript (bytes)')
+console.table(fixtureNames.map((name) => ({ name, ...measurements[name].server.total })))
 console.log(
   `${result.comparison.lighter} is ${result.comparison.difference.brotli} Brotli bytes lighter in this benchmark.`,
 )
@@ -103,9 +91,31 @@ function findJavaScript(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name)
 
-    if (entry.isDirectory()) return findJavaScript(path)
-    return entry.isFile() && entry.name.endsWith('.js') ? [path] : []
+    if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : findJavaScript(path)
+    return entry.isFile() && /\.m?js$/.test(entry.name) ? [path] : []
   })
+}
+
+function measureJavaScript(directory, checkState, server) {
+  let hasCleanup = false
+  const assets = findJavaScript(directory).map((path) => {
+    const contents = readFileSync(path)
+    if (checkState) {
+      const code = contents.toString()
+      assert.doesNotMatch(code, /nuxt-state:inspect|__nuxt_state_devtools__|nuxt-state:devtools/)
+      hasCleanup ||= code.includes('state-disposal')
+    }
+
+    return {
+      file: relative(directory, path),
+      raw: contents.byteLength,
+      gzip: gzipSync(contents, { level: 9 }).byteLength,
+      brotli: brotliCompressSync(contents).byteLength,
+    }
+  })
+  assert.ok(assets.length > 0)
+  if (checkState) assert.equal(hasCleanup, server, 'Nitro request listener must be server-only')
+  return { assets, total: sumSizes(assets) }
 }
 
 function sumSizes(assets) {
@@ -127,3 +137,4 @@ function packageVersion(name) {
 
   return JSON.parse(readFileSync(packagePath, 'utf8')).version
 }
+import assert from 'node:assert/strict'
