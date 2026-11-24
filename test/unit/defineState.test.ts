@@ -154,6 +154,29 @@ describe('defineState', () => {
     expect(getStateRegistry(nuxtApp).active.has('$readOnly')).toBe(true)
   })
 
+  it('does not register an unmount callback for an instance whose restore fails', () => {
+    const onUnmount = vi.fn()
+    const nuxtApp = { vueApp: { onUnmount } }
+    setCurrentNuxtApp(nuxtApp)
+    receiveStateSnapshots(nuxtApp, { $counter: { count: { type: 'ref', value: 41 } } })
+    let attempts = 0
+    const useCounter = defineStateInternal(() => {
+      const attempt = ++attempts
+      const count = ref(0)
+      return {
+        get count() {
+          if (attempt === 1) throw new Error('restore failed')
+          return count
+        },
+      }
+    }, '$counter')
+
+    expect(() => useCounter()).toThrow('restore failed')
+    expect(onUnmount).not.toHaveBeenCalled()
+    expect(useCounter().count.value).toBe(41)
+    expect(onUnmount).toHaveBeenCalledOnce()
+  })
+
   it('restores a compiler-keyed state before returning it', () => {
     const nuxtApp = {}
     setCurrentNuxtApp(nuxtApp)

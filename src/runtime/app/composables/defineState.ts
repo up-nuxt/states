@@ -49,9 +49,6 @@ export function defineState<T>(factory: () => T & NotPromise<T>, internalKey?: s
       if (import.meta.server) {
         const event = useRequestEvent(nuxtApp)
         if (event) registerRequestCleanup(event.context, () => scope.stop())
-      } else {
-        const app = nuxtApp as { vueApp?: { onUnmount?: (cleanup: () => void) => void } }
-        app.vueApp?.onUnmount?.(dispose)
       }
 
       if (internalKey) {
@@ -74,6 +71,11 @@ export function defineState<T>(factory: () => T & NotPromise<T>, internalKey?: s
         }
 
         registerHydratableState(nuxtApp, internalKey, entry)
+      }
+
+      if (!import.meta.server) {
+        const app = nuxtApp as { vueApp?: { onUnmount?: (cleanup: () => void) => void } }
+        app.vueApp?.onUnmount?.(dispose)
       }
 
       return instance
