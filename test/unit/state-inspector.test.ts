@@ -128,6 +128,30 @@ describe('development state inspector', () => {
     expect(setNext).toHaveBeenCalledTimes(40)
   })
 
+  it('reads only visible object getters and skips a throwing getter beyond the limit', () => {
+    const read = vi.fn(() => 1)
+    const input = Object.defineProperties(
+      {},
+      Object.fromEntries(
+        Array.from({ length: 100 }, (_, index) => [`key${index}`, { enumerable: true, get: read }]),
+      ),
+    )
+    const outside = vi.fn(() => {
+      throw new Error('outside preview')
+    })
+    Object.defineProperty(input, 'outside', { enumerable: true, get: outside })
+
+    const properties = Object.fromEntries(
+      Array.from({ length: 40 }, (_, index) => [`key${index}`, 1]),
+    )
+    expect(previewValue(input)).toMatchObject({
+      preview: { properties, total: 101, truncated: true },
+      truncated: true,
+    })
+    expect(read).toHaveBeenCalledTimes(40)
+    expect(outside).not.toHaveBeenCalled()
+  })
+
   it('reflects current values on demand without watchers', () => {
     const nuxtApp = {}
     const count = ref(1)

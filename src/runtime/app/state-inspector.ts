@@ -179,12 +179,14 @@ function visit(value: unknown, depth: number, context: PreviewContext): unknown 
     return { id: `#${id}`, unsupported: constructor?.name || 'Object' }
   }
 
-  const properties = Object.entries(raw)
+  const properties = Object.keys(raw)
   if (properties.length > MAX_ITEMS) context.truncated = true
   return {
     id: `#${id}`,
     properties: Object.fromEntries(
-      properties.slice(0, MAX_ITEMS).map(([key, item]) => [key, visit(item, depth + 1, context)]),
+      properties
+        .slice(0, MAX_ITEMS)
+        .map((key) => [key, visit((raw as Record<string, unknown>)[key], depth + 1, context)]),
     ),
     ...(properties.length > MAX_ITEMS ? { truncated: true, total: properties.length } : {}),
   }

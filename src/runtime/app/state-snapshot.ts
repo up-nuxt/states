@@ -1,4 +1,4 @@
-import { isReactive, isReadonly, isRef, toRaw, type Ref } from 'vue'
+import { isReactive, isReadonly, isRef, isShallow, toRaw, type Ref } from 'vue'
 
 interface RefSnapshot {
   type: 'ref'
@@ -59,6 +59,51 @@ function isTrackableObject(value: unknown): value is object {
   return typeof value === 'object' && value !== null
 }
 
+function patchMap(
+  target: Map<unknown, unknown>,
+  source: Map<unknown, unknown>,
+  resolve: (value: unknown) => unknown,
+): void {
+  const raw = toRaw(target)
+  if (raw !== target && Object.getPrototypeOf(raw) === Map.prototype && raw.size === source.size) {
+    const existingKeys = raw.keys()
+    let sameOrder = true
+    for (const key of source.keys()) {
+      if (!Object.is(existingKeys.next().value, toRaw(resolve(key)))) {
+        sameOrder = false
+        break
+      }
+    }
+
+    if (sameOrder) {
+      const shallow = isShallow(target)
+      for (const [key, value] of source) {
+        const resolvedKey = toRaw(resolve(key))
+        const resolvedValue = resolve(value)
+        // Compare what Vue's Map setter stores, preserving readonly and shallow wrappers.
+        const storedValue =
+          !shallow &&
+          isTrackableObject(resolvedValue) &&
+          !isShallow(resolvedValue) &&
+          !isReadonly(resolvedValue)
+            ? toRaw(resolvedValue)
+            : resolvedValue
+        if (
+          !Object.is(raw.get(resolvedKey), storedValue) ||
+          (storedValue === undefined && !raw.has(resolvedKey))
+        ) {
+          target.set(resolvedKey, resolvedValue)
+        }
+      }
+      return
+    }
+  }
+
+  const entries = raw === source ? [...source] : source
+  target.clear()
+  for (const [key, value] of entries) target.set(resolve(key), resolve(value))
+}
+
 function writeGraph(target: object, source: object, resolve: (value: unknown) => unknown): void {
   if (Array.isArray(target) && Array.isArray(source)) {
     for (let index = 0; index < source.length; index++) {
@@ -66,9 +111,7 @@ function writeGraph(target: object, source: object, resolve: (value: unknown) =>
     }
     target.length = source.length
   } else if (target instanceof Map && source instanceof Map) {
-    const entries = toRaw(target) === source ? [...source] : source
-    target.clear()
-    for (const [key, value] of entries) target.set(resolve(key), resolve(value))
+    patchMap(target, source, resolve)
   } else if (target instanceof Set && source instanceof Set) {
     const values = toRaw(target) === source ? [...source] : source
     target.clear()
@@ -84,7 +127,7 @@ function writeGraph(target: object, source: object, resolve: (value: unknown) =>
 // Preserve payload objects shared with Nuxt data unless an edge needs to point
 // to a reused client object. Keep one predecessor per node and store extra
 // edges only at joins, so unrelated trees do not allocate a Set for each node.
-function createGraphResolver(bindings: Map<object, object>, roots: unknown[]) {
+function findAffectedNodes(roots: Iterable<unknown>, boundSources: Iterable<object>): Set<object> {
   const parents = new Map<object, object | null>()
   const extraParents = new Map<object, object[]>()
   const scan: object[] = []
@@ -128,7 +171,7 @@ function createGraphResolver(bindings: Map<object, object>, roots: unknown[]) {
     }
   }
 
-  const affected = new Set(bindings.keys())
+  const affected = new Set(boundSources)
   for (const source of affected) {
     const firstParent = parents.get(source)
     if (firstParent) affected.add(firstParent)
@@ -136,6 +179,10 @@ function createGraphResolver(bindings: Map<object, object>, roots: unknown[]) {
     if (additional) for (const other of additional) affected.add(other)
   }
 
+  return affected
+}
+
+function createGraphResolver(bindings: Map<object, object>, affected: ReadonlySet<object>) {
   function resolve(value: unknown): unknown {
     if (!isTrackableObject(value)) return value
     const source = toRaw(value)
@@ -228,17 +275,24 @@ export function restoreState(state: unknown, snapshot: unknown): void {
   }
 
   const reactiveBindings = [...bindings]
-  const resolve = createGraphResolver(bindings, [
-    ...bindings.keys(),
-    ...refs.map(({ value }) => value),
-  ])
+  const sources = [...bindings.keys(), ...refs.map(({ value }) => value)]
+  const resolve = createGraphResolver(bindings, findAffectedNodes(sources, bindings.keys()))
 
   for (const [source, target] of reactiveBindings) writeGraph(target, source, resolve)
-  for (const [source, target] of duplicateRoots) {
-    // Give this root its own back-references, while retaining other explicit roots.
-    const localBindings = new Map(rootBindings)
-    localBindings.set(source, target)
-    writeGraph(target, source, createGraphResolver(localBindings, [source]))
+  if (rootBindings) {
+    const duplicateAnalysis = new Map<object, ReadonlySet<object>>()
+    for (const [source, target] of duplicateRoots) {
+      // The bound sources are identical across duplicates of this source.
+      let affected = duplicateAnalysis.get(source)
+      if (!affected) {
+        affected = findAffectedNodes([source], rootBindings.keys())
+        duplicateAnalysis.set(source, affected)
+      }
+      // Each target still needs its own back-references and cloned branches.
+      const localBindings = new Map(rootBindings)
+      localBindings.set(source, target)
+      writeGraph(target, source, createGraphResolver(localBindings, affected))
+    }
   }
   for (const { target, value } of refs) target.value = resolve(value)
 }

@@ -19,6 +19,20 @@ function unrelatedCollection(size, createValue) {
   }
 }
 
+const mapEntries = Array.from({ length: 20_000 }, (_, index) => [index, index])
+function reactiveMap(entries) {
+  return {
+    iterations: 12,
+    snapshot: { map: { type: 'reactive', value: new Map(entries) } },
+    setup: () => ({ map: reactive(new Map(mapEntries)) }),
+    verify: ({ map }) => assert.deepEqual([...map], entries),
+  }
+}
+
+const duplicateSource = { rows: Array.from({ length: 5_000 }, (_, index) => ({ index })) }
+duplicateSource.cycle = { owner: duplicateSource }
+const duplicateNames = Array.from({ length: 16 }, (_, index) => `root${index}`)
+
 const shared = { count: 42 }
 const cycle = { owner: shared }
 cycle.self = cycle
@@ -31,6 +45,23 @@ const cases = {
   'unrelated Map with 2,000 scalar values': unrelatedCollection(2_000, (index) => index),
   'unrelated Map with 20,000 scalar values': unrelatedCollection(20_000, (index) => index),
   'unrelated Map with 20,000 objects': unrelatedCollection(20_000, (index) => ({ index })),
+  'reactive Map with unchanged keys and values': reactiveMap(mapEntries),
+  'reactive Map with only its final value changed': reactiveMap([
+    ...mapEntries.slice(0, -1),
+    [19_999, -1],
+  ]),
+  'reactive Map with reversed order': reactiveMap([...mapEntries].reverse()),
+  '16 reactive roots sharing a source with 5,000 rows': {
+    iterations: 12,
+    snapshot: Object.fromEntries(
+      duplicateNames.map((name) => [name, { type: 'reactive', value: duplicateSource }]),
+    ),
+    setup: () => Object.fromEntries(duplicateNames.map((name) => [name, reactive({})])),
+    verify: (targets) => {
+      assert.equal(new Set(Object.values(targets)).size, duplicateNames.length)
+      for (const root of Object.values(targets)) assert.equal(root.cycle.owner, root)
+    },
+  },
   'cyclic collections linked to a reactive root': {
     iterations: 1_000,
     snapshot: {

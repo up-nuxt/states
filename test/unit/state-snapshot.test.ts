@@ -9,6 +9,8 @@ import {
   ref,
   shallowReactive,
   shallowRef,
+  toRaw,
+  watchEffect,
 } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import { restoreState, snapshotState } from '../../src/runtime/app/state-snapshot'
@@ -325,6 +327,115 @@ describe('state snapshots', () => {
     expect([...set]).toEqual([42])
   })
 
+  it('only notifies synchronous observers for changed values when Map keys stay in order', () => {
+    const map = reactive(
+      new Map([
+        ['a', 1],
+        ['b', 2],
+        ['c', 3],
+      ]),
+    )
+    const observe = vi.fn()
+    const stop = watchEffect(() => observe([...map]), { flush: 'sync' })
+    const snapshot = (entries: [string, number][]) => ({
+      map: { type: 'reactive', value: new Map(entries) },
+    })
+
+    try {
+      restoreState(
+        { map },
+        snapshot([
+          ['a', 1],
+          ['b', 2],
+          ['c', 3],
+        ]),
+      )
+      expect(observe).toHaveBeenCalledOnce()
+      restoreState(
+        { map },
+        snapshot([
+          ['a', 1],
+          ['b', 42],
+          ['c', 3],
+        ]),
+      )
+      expect(observe).toHaveBeenCalledTimes(2)
+      expect(observe).toHaveBeenLastCalledWith([
+        ['a', 1],
+        ['b', 42],
+        ['c', 3],
+      ])
+      restoreState(
+        { map },
+        snapshot([
+          ['c', 3],
+          ['b', 42],
+          ['a', 1],
+        ]),
+      )
+      expect([...map]).toEqual([
+        ['c', 3],
+        ['b', 42],
+        ['a', 1],
+      ])
+      restoreState(
+        { map },
+        snapshot([
+          ['d', 4],
+          ['b', 42],
+          ['a', 1],
+        ]),
+      )
+      expect([...map]).toEqual([
+        ['d', 4],
+        ['b', 42],
+        ['a', 1],
+      ])
+    } finally {
+      stop()
+    }
+  })
+
+  it.each([reactive, shallowReactive])('preserves Map storage semantics for %s', (wrap) => {
+    const root = reactive({ value: 0 })
+    const serverRoot = { value: 42 }
+    const readonlyValue = readonly({ value: 1 })
+    const shallowValue = shallowReactive({ nested: { value: 2 } })
+    const values = new Map<unknown, unknown>([
+      [toRaw(root), wrap === shallowReactive ? toRaw(root) : root],
+      [NaN, readonlyValue],
+      ['shallow', shallowValue],
+    ])
+    const map = wrap(values)
+    const observe = vi.fn()
+    const stop = watchEffect(() => observe(map.size), { flush: 'sync' })
+
+    try {
+      restoreState(
+        { root, map },
+        {
+          root: { type: 'reactive', value: serverRoot },
+          map: {
+            type: 'reactive',
+            value: new Map<unknown, unknown>([
+              [serverRoot, serverRoot],
+              [NaN, readonlyValue],
+              ['shallow', shallowValue],
+            ]),
+          },
+        },
+      )
+
+      expect([...values.keys()][0]).toBe(toRaw(root))
+      expect(values.get(toRaw(root))).toBe(wrap === shallowReactive ? root : toRaw(root))
+      expect(values.get(NaN)).toBe(readonlyValue)
+      expect(values.get('shallow')).toBe(shallowValue)
+      expect(observe).toHaveBeenCalledTimes(2)
+    } finally {
+      stop()
+    }
+  })
+
   it('restores cyclic objects without recursion overflow', () => {
     interface CyclicValue {
       value: string
@@ -438,6 +549,23 @@ describe('state snapshots', () => {
     expect(secondMap.get(secondMap)).toBe(secondMap)
     expect([...firstSet][0]).toBe(firstSet)
     expect([...secondSet][0]).toBe(secondSet)
+  })
+
+  it('reuses duplicate Map analysis without sharing the restored branches', () => {
+    const source = new Map<string, unknown>()
+    source.set('branch', { parent: source })
+    const scan = vi.spyOn(source, 'forEach')
+    const first = reactive(new Map())
+    const second = reactive(new Map())
+    const third = reactive(new Map())
+    const entry = { type: 'reactive', value: source }
+
+    restoreState({ first, second, third }, { first: entry, second: entry, third: entry })
+
+    expect(first.get('branch').parent).toBe(first)
+    expect(second.get('branch').parent).toBe(second)
+    expect(third.get('branch').parent).toBe(third)
+    expect(scan).toHaveBeenCalledTimes(2)
   })
 
   it('relinks new branches and cycles without modifying the payload graph', () => {
