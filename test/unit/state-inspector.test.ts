@@ -176,6 +176,56 @@ describe('development state inspector', () => {
     expect(outside).not.toHaveBeenCalled()
   })
 
+  it('stops reading nested getters when the preview budget runs out', () => {
+    const read = vi.fn(() => 1)
+    const object = () =>
+      Object.fromEntries(
+        Array.from({ length: 40 }, (_, index) => {
+          const leaf = Object.defineProperty({}, 'value', { enumerable: true, get: read })
+          return [index, leaf]
+        }),
+      )
+    const preview = previewValue(Array.from({ length: 40 }, object))
+
+    expect(preview).toMatchObject({ truncated: true })
+    expect(read.mock.calls.length).toBeGreaterThan(0)
+    expect(read.mock.calls.length).toBeLessThanOrEqual(100)
+  })
+
+  it('bounds top-level member reads and reports omitted members', () => {
+    const nuxtApp = {}
+    const read = vi.fn(() => 1)
+    const state = Object.defineProperties(
+      {},
+      Object.fromEntries(
+        Array.from({ length: 120 }, (_, index) => [index, { enumerable: true, get: read }]),
+      ),
+    )
+    registerDebugState(nuxtApp, '$large', state)
+
+    expect(inspectActiveStates(nuxtApp).active[0]).toMatchObject({ totalMembers: 120 })
+    expect(read).toHaveBeenCalledTimes(40)
+  })
+
+  it('contains errors whose message cannot be read', () => {
+    const error = Object.defineProperty(new Error(), 'message', {
+      get() {
+        throw new Error('message is unavailable')
+      },
+    })
+    const state = Object.defineProperty({}, 'broken', {
+      enumerable: true,
+      get() {
+        throw error
+      },
+    })
+    const nuxtApp = {}
+    registerDebugState(nuxtApp, '$error', state)
+
+    expect(previewValue(state)).toEqual({ unavailable: 'Value could not be inspected' })
+    expect(inspectActiveStates(nuxtApp).active[0]?.members[0]?.kind).toBe('unavailable')
+  })
+
   it('reflects current values on demand without watchers', () => {
     const nuxtApp = {}
     const count = ref(1)

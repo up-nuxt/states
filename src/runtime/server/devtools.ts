@@ -89,7 +89,7 @@ function renderDevtoolsView(): string {
     }
     const render = (active, knownStates, query) => {
       const activeHTML = active.length
-        ? active.map(state => '<article><div><h2>' + escapeHTML(state.name) + '<span class="badge">' + escapeHTML(state.hydration) + '</span></h2><div class="meta">Internal hydration key: ' + escapeHTML(state.key) + '</div></div><table><thead><tr><th>Member</th><th>Kind</th><th>Value preview</th></tr></thead><tbody>' + state.members.map(member => '<tr><td>' + escapeHTML(member.name) + '</td><td>' + escapeHTML(member.kind) + '</td><td><pre>' + escapeHTML(JSON.stringify(member.value, null, 2)) + '</pre></td></tr>').join('') + '</tbody></table></article>').join('')
+        ? active.map(state => '<article><div><h2>' + escapeHTML(state.name) + '<span class="badge">' + escapeHTML(state.hydration) + '</span></h2><div class="meta">Internal hydration key: ' + escapeHTML(state.key) + '</div>' + (state.totalMembers > state.members.length ? '<div class="meta">Showing ' + state.members.length + ' of ' + state.totalMembers + ' members</div>' : '') + '</div><table><thead><tr><th>Member</th><th>Kind</th><th>Value preview</th></tr></thead><tbody>' + state.members.map(member => '<tr><td>' + escapeHTML(member.name) + '</td><td>' + escapeHTML(member.kind) + '</td><td><pre>' + escapeHTML(JSON.stringify(member.value, null, 2)) + '</pre></td></tr>').join('') + '</tbody></table></article>').join('')
         : '<p class="empty">' + (query ? 'No matching active states.' : 'No active states yet. Opening this panel does not instantiate lazy state.') + '</p>'
       activeRoot.innerHTML = activeHTML
       renderKnown(knownStates, query)

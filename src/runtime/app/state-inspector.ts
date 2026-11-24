@@ -14,6 +14,7 @@ export interface StateInspectorEntry {
   origin?: string
   hydration: 'Hydrated' | 'Client-only' | 'Server'
   members: StateInspectorMember[]
+  totalMembers: number
 }
 
 export interface StateInspectorPage {
@@ -53,7 +54,7 @@ export function inspectActiveStates(nuxtApp: object, query = '', page = 0): Stat
       source: debug.source,
       origin: debug.origin,
       hydration: debug.hydration,
-      members: inspectMembers(debug.state),
+      ...inspectMembers(debug.state),
     })
   }
 
@@ -85,13 +86,17 @@ export function previewValue(value: unknown): unknown {
   }
 }
 
-function inspectMembers(state: unknown): StateInspectorMember[] {
+function inspectMembers(state: unknown): Pick<StateInspectorEntry, 'members' | 'totalMembers'> {
   if (!isObjectLike(state)) {
-    return [{ name: 'value', kind: classifyStateMember(state), value: previewValue(state) }]
+    return {
+      members: [{ name: 'value', kind: classifyStateMember(state), value: previewValue(state) }],
+      totalMembers: 1,
+    }
   }
 
   try {
-    return Object.keys(state).map((name) => {
+    const keys = Object.keys(state)
+    const members = keys.slice(0, MAX_ITEMS).map((name) => {
       try {
         const value = state[name]
         return {
@@ -103,27 +108,37 @@ function inspectMembers(state: unknown): StateInspectorMember[] {
         return { name, kind: 'unavailable', value: { unavailable: safeErrorMessage(error) } }
       }
     })
+    return { members, totalMembers: keys.length }
   } catch (error) {
-    return [
-      {
-        name: 'value',
-        kind: 'unavailable',
-        value: { unavailable: safeErrorMessage(error) },
-      },
-    ]
+    return {
+      members: [
+        { name: 'value', kind: 'unavailable', value: { unavailable: safeErrorMessage(error) } },
+      ],
+      totalMembers: 1,
+    }
   }
 }
 
-function takePreviewItems<T>(items: Iterable<T>): T[] {
-  const preview: T[] = []
+function previewItems<T, R>(
+  items: Iterable<T>,
+  context: PreviewContext,
+  render: (item: T) => R,
+): R[] {
+  const preview: R[] = []
+  if (context.nodes >= MAX_NODES) return preview
   for (const item of items) {
-    preview.push(item)
-    if (preview.length === MAX_ITEMS) break
+    preview.push(render(item))
+    if (preview.length === MAX_ITEMS || context.nodes >= MAX_NODES) break
   }
   return preview
 }
 
 function visit(value: unknown, depth: number, context: PreviewContext): unknown {
+  if (context.nodes >= MAX_NODES) {
+    context.truncated = true
+    return { truncated: true }
+  }
+  const id = ++context.nodes
   if (typeof value === 'string') {
     if (value.length <= MAX_STRING) return value
     context.truncated = true
@@ -139,9 +154,8 @@ function visit(value: unknown, depth: number, context: PreviewContext): unknown 
   const known = context.seen.get(raw)
   if (known) return { reference: `#${known}` }
 
-  const id = ++context.nodes
   context.seen.set(raw, id)
-  if (context.nodes > MAX_NODES || depth >= MAX_DEPTH) {
+  if (depth >= MAX_DEPTH) {
     context.truncated = true
     return { id: `#${id}`, truncated: true }
   }
@@ -154,35 +168,47 @@ function visit(value: unknown, depth: number, context: PreviewContext): unknown 
     }
   }
   if (raw instanceof Map) {
-    const truncated = raw.size > MAX_ITEMS
+    const entries = previewItems(raw.entries(), context, ([key, item]) => [
+      visit(key, depth + 1, context),
+      visit(item, depth + 1, context),
+    ])
+    const truncated = raw.size > entries.length
     if (truncated) context.truncated = true
     return {
       id: `#${id}`,
       type: 'Map',
-      entries: takePreviewItems(raw.entries()).map(([key, item]) => [
-        visit(key, depth + 1, context),
-        visit(item, depth + 1, context),
-      ]),
+      entries,
       ...(truncated ? { truncated: true, total: raw.size } : {}),
     }
   }
   if (raw instanceof Set) {
-    const truncated = raw.size > MAX_ITEMS
+    const values = previewItems(raw, context, (item) => visit(item, depth + 1, context))
+    const truncated = raw.size > values.length
     if (truncated) context.truncated = true
     return {
       id: `#${id}`,
       type: 'Set',
-      values: takePreviewItems(raw).map((item) => visit(item, depth + 1, context)),
+      values,
       ...(truncated ? { truncated: true, total: raw.size } : {}),
     }
   }
   if (Array.isArray(raw)) {
-    if (raw.length > MAX_ITEMS) context.truncated = true
+    const values: unknown[] = []
+    for (
+      let index = 0;
+      index < Math.min(raw.length, MAX_ITEMS) && context.nodes < MAX_NODES;
+      index++
+    ) {
+      if (index in raw) values[index] = visit(raw[index], depth + 1, context)
+      else values.length++
+    }
+    const truncated = raw.length > values.length
+    if (truncated) context.truncated = true
     return {
       id: `#${id}`,
       type: 'Array',
-      values: raw.slice(0, MAX_ITEMS).map((item) => visit(item, depth + 1, context)),
-      ...(raw.length > MAX_ITEMS ? { truncated: true, total: raw.length } : {}),
+      values,
+      ...(truncated ? { truncated: true, total: raw.length } : {}),
     }
   }
   if (Object.getPrototypeOf(raw) !== Object.prototype && Object.getPrototypeOf(raw) !== null) {
@@ -190,16 +216,18 @@ function visit(value: unknown, depth: number, context: PreviewContext): unknown 
     return { id: `#${id}`, unsupported: constructor?.name || 'Object' }
   }
 
-  const properties = Object.keys(raw)
-  if (properties.length > MAX_ITEMS) context.truncated = true
+  const keys = Object.keys(raw)
+  const entries = previewItems(
+    keys,
+    context,
+    (key) => [key, visit((raw as Record<string, unknown>)[key], depth + 1, context)] as const,
+  )
+  const truncated = keys.length > entries.length
+  if (truncated) context.truncated = true
   return {
     id: `#${id}`,
-    properties: Object.fromEntries(
-      properties
-        .slice(0, MAX_ITEMS)
-        .map((key) => [key, visit((raw as Record<string, unknown>)[key], depth + 1, context)]),
-    ),
-    ...(properties.length > MAX_ITEMS ? { truncated: true, total: properties.length } : {}),
+    properties: Object.fromEntries(entries),
+    ...(truncated ? { truncated: true, total: keys.length } : {}),
   }
 }
 
@@ -208,6 +236,11 @@ function isObjectLike(value: unknown): value is Record<string, unknown> {
 }
 
 function safeErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message.slice(0, 200)
+  try {
+    const message = error instanceof Error ? error.message : undefined
+    if (typeof message === 'string') return message.slice(0, 200)
+  } catch {
+    // A thrown value can expose an accessor or a revoked proxy.
+  }
   return 'Value could not be inspected'
 }
