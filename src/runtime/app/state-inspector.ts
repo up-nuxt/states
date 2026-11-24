@@ -16,6 +16,12 @@ export interface StateInspectorEntry {
   members: StateInspectorMember[]
 }
 
+export interface StateInspectorPage {
+  active: StateInspectorEntry[]
+  total: number
+  pageSize: number
+}
+
 interface PreviewContext {
   seen: WeakMap<object, number>
   nodes: number
@@ -26,27 +32,32 @@ const MAX_DEPTH = 4
 const MAX_ITEMS = 40
 const MAX_NODES = 200
 const MAX_STRING = 500
+const PAGE_SIZE = 20
 
-export function inspectActiveStates(nuxtApp: object): StateInspectorEntry[] {
-  const entries: StateInspectorEntry[] = []
+export function inspectActiveStates(nuxtApp: object, query = '', page = 0): StateInspectorPage {
+  const active: StateInspectorEntry[] = []
+  const search = query.trim().toLowerCase()
+  const offset = Number.isSafeInteger(page) && page > 0 ? page * PAGE_SIZE : 0
+  let total = 0
 
-  for (const [key, entry] of getStateRegistry(nuxtApp).active) {
-    if (!entry.debug) continue
+  for (const [key, { debug }] of getStateRegistry(nuxtApp).active) {
+    if (!debug) continue
+    const name = debug.name || `State ${key}`
+    if (search && !`${name} ${key}`.toLowerCase().includes(search)) continue
+    const index = total++
+    if (index < offset || active.length === PAGE_SIZE) continue
 
-    const state = entry.debug.state
-    const members = inspectMembers(state)
-
-    entries.push({
+    active.push({
       key,
-      name: entry.debug.name || `State ${key}`,
-      source: entry.debug.source,
-      origin: entry.debug.origin,
-      hydration: entry.debug.hydration,
-      members,
+      name,
+      source: debug.source,
+      origin: debug.origin,
+      hydration: debug.hydration,
+      members: inspectMembers(debug.state),
     })
   }
 
-  return entries
+  return { active, total, pageSize: PAGE_SIZE }
 }
 
 export function classifyStateMember(value: unknown): string {

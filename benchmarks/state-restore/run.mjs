@@ -29,6 +29,25 @@ function reactiveMap(entries) {
   }
 }
 
+const values = Array.from({ length: 20_000 }, (_, index) => index)
+function reactiveArray(items) {
+  return {
+    iterations: 12,
+    snapshot: { array: { type: 'reactive', value: items } },
+    setup: () => ({ array: reactive([...values]) }),
+    verify: ({ array }) => assert.deepEqual([...array], items),
+  }
+}
+
+function reactiveSet(items) {
+  return {
+    iterations: 12,
+    snapshot: { set: { type: 'reactive', value: new Set(items) } },
+    setup: () => ({ set: reactive(new Set(values)) }),
+    verify: ({ set }) => assert.deepEqual([...set], items),
+  }
+}
+
 const duplicateSource = { rows: Array.from({ length: 5_000 }, (_, index) => ({ index })) }
 duplicateSource.cycle = { owner: duplicateSource }
 const duplicateNames = Array.from({ length: 16 }, (_, index) => `root${index}`)
@@ -51,6 +70,13 @@ const cases = {
     [19_999, -1],
   ]),
   'reactive Map with reversed order': reactiveMap([...mapEntries].reverse()),
+  'dense reactive array with unchanged values': reactiveArray(values),
+  'dense reactive array with every value changed': reactiveArray(values.map((value) => -value - 1)),
+  'reactive Set with unchanged order and values': reactiveSet(values),
+  'reactive Set with one appended value': reactiveSet([...values, -1]),
+  'reactive Set with one removed tail value': reactiveSet(values.slice(0, -1)),
+  'reactive Set cleared by the snapshot': reactiveSet([]),
+  'reactive Set with reversed order': reactiveSet([...values].reverse()),
   '16 reactive roots sharing a source with 5,000 rows': {
     iterations: 12,
     snapshot: Object.fromEntries(

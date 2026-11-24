@@ -107,11 +107,11 @@ describe('nuxt-state module', async () => {
     expect(second).not.toContain('<output id="remote-primary-marker">request-a</output>')
   })
 
-  it('characterizes private mutable state as invisible to snapshots', async () => {
+  it('omits the snapshot when a factory exposes only readonly state', async () => {
     const html = await $fetch<string>('/private-state')
 
     expect(html).toContain('<output id="private-double">2</output>')
-    expect(html).toMatch(/"__nuxt_state__":\d+/)
+    expect(html).toContain('"__nuxt_state__":-1')
     expect(html).not.toContain('"type":"ref"')
   })
 

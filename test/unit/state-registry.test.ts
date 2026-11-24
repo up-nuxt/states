@@ -79,7 +79,6 @@ describe('state hydration registry', () => {
     expect(hotRestore).not.toHaveBeenCalled()
     expect(firstDispose).toHaveBeenCalledOnce()
     expect(getStateRegistry(nuxtApp).active.size).toBe(1)
-    expect(getStateRegistry(nuxtApp).hydration.size).toBe(0)
   })
 
   it('replaces rather than accumulates pending hydration payloads', () => {
@@ -92,7 +91,13 @@ describe('state hydration registry', () => {
       $new: { count: 2 },
     })
 
-    expect([...getStateRegistry(nuxtApp).hydration.keys()]).toEqual(['$new'])
+    const restoreOld = vi.fn()
+    const restoreNew = vi.fn()
+    registerHydratableState(nuxtApp, '$old', { snapshot: vi.fn(), restore: restoreOld })
+    registerHydratableState(nuxtApp, '$new', { snapshot: vi.fn(), restore: restoreNew })
+
+    expect(restoreOld).not.toHaveBeenCalled()
+    expect(restoreNew).toHaveBeenCalledWith({ count: 2 })
   })
 
   it('clears snapshots left unused after initial hydration', () => {
@@ -103,6 +108,36 @@ describe('state hydration registry', () => {
     })
     clearPendingStateSnapshots(nuxtApp)
 
-    expect(getStateRegistry(nuxtApp).hydration.size).toBe(0)
+    const restore = vi.fn()
+    registerHydratableState(nuxtApp, '$unused', { snapshot: vi.fn(), restore })
+    expect(restore).not.toHaveBeenCalled()
+  })
+
+  it('looks up only active and subsequently registered keys without changing the payload', () => {
+    const nuxtApp = {}
+    const lazy = vi.fn(() => ({ count: 2 }))
+    const unused = vi.fn()
+    const payload = Object.freeze({
+      $active: { count: 1 },
+      get $lazy() {
+        return lazy()
+      },
+      get $unused() {
+        return unused()
+      },
+    })
+    const active = vi.fn()
+    const restore = vi.fn()
+    registerHydratableState(nuxtApp, '$active', { snapshot: vi.fn(), restore: active })
+
+    receiveStateSnapshots(nuxtApp, payload)
+
+    expect(active).toHaveBeenCalledWith({ count: 1 })
+    expect(lazy).not.toHaveBeenCalled()
+    registerHydratableState(nuxtApp, '$lazy', { snapshot: vi.fn(), restore })
+    expect(restore).toHaveBeenCalledWith({ count: 2 })
+    expect(lazy).toHaveBeenCalledOnce()
+    expect(unused).not.toHaveBeenCalled()
+    expect(Object.keys(payload)).toEqual(['$active', '$lazy', '$unused'])
   })
 })

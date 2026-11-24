@@ -56,6 +56,14 @@ describe('Nuxt DevTools v4 dock', async () => {
 
       await page.locator('#devtools-increment').click()
       await expect.poll(() => count.textContent()).toBe('5')
+
+      const filter = inspector.getByRole('searchbox')
+      await filter.fill('no-such-state')
+      await expect
+        .poll(() => inspector.getByText('No matching active states.').isVisible())
+        .toBe(true)
+      await filter.fill('')
+      await expect.poll(() => count.isVisible()).toBe(true)
       await expect(page.locator('#devtools-lazy-calls').textContent()).resolves.toBe('0')
     } finally {
       await page.close()

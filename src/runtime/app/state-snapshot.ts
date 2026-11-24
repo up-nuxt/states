@@ -22,19 +22,18 @@ function unwrapReactive(value: unknown): unknown {
   return isReactive(value) ? toRaw(value) : value
 }
 
-export function snapshotState(state: unknown): StateSnapshot {
-  const snapshot: StateSnapshot = {}
-
-  if (!isObjectLike(state)) return snapshot
+export function snapshotState(state: unknown): StateSnapshot | undefined {
+  if (!isObjectLike(state)) return
+  let snapshot: StateSnapshot | undefined
 
   for (const [name, value] of Object.entries(state)) {
     if (isRef(value) && !isReadonly(value)) {
-      snapshot[name] = {
+      ;(snapshot ??= {})[name] = {
         type: 'ref',
         value: unwrapReactive(value.value),
       }
     } else if (isReactive(value) && !isReadonly(value)) {
-      snapshot[name] = {
+      ;(snapshot ??= {})[name] = {
         type: 'reactive',
         value: toRaw(value),
       }
@@ -59,6 +58,49 @@ function isTrackableObject(value: unknown): value is object {
   return typeof value === 'object' && value !== null
 }
 
+function reactiveStoredValue(value: unknown, shallow: boolean): unknown {
+  // Deep Vue setters unwrap reactive proxies while preserving readonly and shallow wrappers.
+  return !shallow && isTrackableObject(value) && !isShallow(value) && !isReadonly(value)
+    ? toRaw(value)
+    : value
+}
+
+function isArrayIndex(key: string, length: number): boolean {
+  const index = Number(key)
+  return index < length && key === String(index >>> 0)
+}
+
+function patchArray(
+  target: unknown[],
+  source: unknown[],
+  resolve: (value: unknown) => unknown,
+): void {
+  const raw = toRaw(target)
+  const shallow = isShallow(target)
+  const length = source.length
+  const keys = Object.getOwnPropertyNames(source)
+  const dense = keys[length] === 'length'
+
+  // Array indices precede the length property in own-key order.
+  if (!dense) {
+    for (const key of Object.getOwnPropertyNames(raw)) {
+      if (isArrayIndex(key, length) && !Object.hasOwn(source, key)) delete target[Number(key)]
+    }
+  }
+  const keyCount = dense ? length : keys.length
+  for (let position = 0; position < keyCount; position++) {
+    const key = keys[position]!
+    if (!dense && !isArrayIndex(key, length)) continue
+    const index = Number(key)
+    const value = resolve(source[index])
+    const current = raw === target ? undefined : Object.getOwnPropertyDescriptor(raw, key)
+    if (!current?.writable || !Object.is(current.value, reactiveStoredValue(value, shallow))) {
+      target[index] = value
+    }
+  }
+  if (raw.length !== length) target.length = length
+}
+
 function patchMap(
   target: Map<unknown, unknown>,
   source: Map<unknown, unknown>,
@@ -80,14 +122,7 @@ function patchMap(
       for (const [key, value] of source) {
         const resolvedKey = toRaw(resolve(key))
         const resolvedValue = resolve(value)
-        // Compare what Vue's Map setter stores, preserving readonly and shallow wrappers.
-        const storedValue =
-          !shallow &&
-          isTrackableObject(resolvedValue) &&
-          !isShallow(resolvedValue) &&
-          !isReadonly(resolvedValue)
-            ? toRaw(resolvedValue)
-            : resolvedValue
+        const storedValue = reactiveStoredValue(resolvedValue, shallow)
         if (
           !Object.is(raw.get(resolvedKey), storedValue) ||
           (storedValue === undefined && !raw.has(resolvedKey))
@@ -104,18 +139,62 @@ function patchMap(
   for (const [key, value] of entries) target.set(resolve(key), resolve(value))
 }
 
+function patchSet(
+  target: Set<unknown>,
+  source: Set<unknown>,
+  resolve: (value: unknown) => unknown,
+): void {
+  const raw = toRaw(target)
+  if (
+    raw !== target &&
+    Object.getPrototypeOf(raw) === Set.prototype &&
+    Object.getPrototypeOf(source) === Set.prototype &&
+    source[Symbol.iterator] === Set.prototype.values &&
+    // Clearing and rebuilding needs fewer writes when most members will be removed.
+    raw.size - source.size <= source.size
+  ) {
+    const shallow = isShallow(target)
+    const existing = Set.prototype.values.call(raw)
+    const incoming = source[Symbol.iterator]()
+    let matches = true
+
+    for (let index = 0, size = Math.min(raw.size, source.size); index < size; index++) {
+      const value = resolve(incoming.next().value)
+      const stored = isTrackableObject(value) ? toRaw(value) : value
+      // Vue may deduplicate wrapped members against their raw values.
+      if (
+        (!Object.is(stored, value) && (shallow || isShallow(value) || isReadonly(value))) ||
+        !Object.is(existing.next().value, stored)
+      ) {
+        matches = false
+        break
+      }
+    }
+
+    if (matches) {
+      if (raw.size > source.size) {
+        for (const value of Array.from(existing)) target.delete(value)
+      } else if (raw.size < source.size) {
+        for (let next = incoming.next(); !next.done; next = incoming.next()) {
+          target.add(resolve(next.value))
+        }
+      }
+      return
+    }
+  }
+
+  const values = raw === source ? [...source] : source
+  target.clear()
+  for (const value of values) target.add(resolve(value))
+}
+
 function writeGraph(target: object, source: object, resolve: (value: unknown) => unknown): void {
   if (Array.isArray(target) && Array.isArray(source)) {
-    for (let index = 0; index < source.length; index++) {
-      target[index] = resolve(source[index])
-    }
-    target.length = source.length
+    patchArray(target, source, resolve)
   } else if (target instanceof Map && source instanceof Map) {
     patchMap(target, source, resolve)
   } else if (target instanceof Set && source instanceof Set) {
-    const values = toRaw(target) === source ? [...source] : source
-    target.clear()
-    for (const value of values) target.add(resolve(value))
+    patchSet(target, source, resolve)
   } else if (isPlainRecord(target) && isPlainRecord(source)) {
     for (const key of Object.keys(target)) {
       if (!Object.hasOwn(source, key)) delete target[key]
@@ -164,7 +243,11 @@ function findAffectedNodes(roots: Iterable<unknown>, boundSources: Iterable<obje
     parent = source
     if (source instanceof Map) source.forEach(visitMapEntry)
     else if (source instanceof Set) source.forEach(visit)
-    else if (Array.isArray(source) || (isPlainRecord(source) && !isRef(source))) {
+    else if (Array.isArray(source)) {
+      for (const key of Object.getOwnPropertyNames(source)) {
+        if (isArrayIndex(key, source.length)) visit(source[Number(key)])
+      }
+    } else if (isPlainRecord(source) && !isRef(source)) {
       for (const key in source) {
         if (Object.hasOwn(source, key)) visit((source as Record<string, unknown>)[key])
       }
@@ -264,11 +347,16 @@ export function restoreState(state: unknown, snapshot: unknown): void {
 
   const rootBindings = duplicateRoots.length ? new Map(bindings) : undefined
   for (const [source, target] of bindings) {
-    for (const [key, value] of Object.entries(source)) {
-      const current = (target as Record<string, unknown>)[key]
-      if (!isTrackableObject(value) || !isTrackableObject(current)) continue
+    const array = Array.isArray(source)
+    const keys = array ? Object.getOwnPropertyNames(source) : Object.keys(source)
+    for (const key of keys) {
+      if (array && !isArrayIndex(key, source.length)) continue
+      const value = (source as Record<string, unknown>)[key]
+      if (!isTrackableObject(value)) continue
       const raw = toRaw(value)
-      if (!bindings.has(raw) && !claimed.has(toRaw(current)) && canPatch(current, raw)) {
+      if (bindings.has(raw)) continue
+      const current = (target as Record<string, unknown>)[key]
+      if (isTrackableObject(current) && !claimed.has(toRaw(current)) && canPatch(current, raw)) {
         claim(current, raw)
       }
     }

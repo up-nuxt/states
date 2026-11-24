@@ -45,7 +45,7 @@ describe('state snapshots', () => {
         computed: computed(() => source.value * 2),
         readonly: readonly({ value: 1 }),
       }),
-    ).toEqual({})
+    ).toBeUndefined()
   })
 
   it('hydrates a mutable source once and lets its returned readonly view update', () => {
@@ -239,6 +239,68 @@ describe('state snapshots', () => {
     restoreState({ state }, { state: { type: 'reactive', value: {} } })
 
     expect(Object.hasOwn(state, 'toString')).toBe(false)
+  })
+
+  it('preserves sparse array holes, explicit undefined, and nested references', () => {
+    const array = reactive<unknown[]>(['stale', 'replace', { owner: null }, 'remove'])
+    const member = array[2] as { owner: unknown }
+    const source: unknown[] = []
+    source.length = 1_000_000
+    source[1] = undefined
+    source[2] = { owner: source }
+    source[999_999] = 'last'
+
+    restoreState({ array }, { array: { type: 'reactive', value: source } })
+
+    expect(array).toHaveLength(1_000_000)
+    expect(Object.keys(array)).toEqual(['1', '2', '999999'])
+    expect(array[1]).toBeUndefined()
+    expect(array[2]).toBe(member)
+    expect(member.owner).toBe(array)
+    expect(array[999_999]).toBe('last')
+    expect(Object.keys(source)).toEqual(['1', '2', '999999'])
+  })
+
+  it('normalizes a reused deep reactive array member as Vue would on assignment', () => {
+    const member = reactive({ count: 0 })
+    const array = reactive([member])
+    expect(toRaw(array)[0]).toBe(member)
+
+    restoreState({ array }, { array: { type: 'reactive', value: [{ count: 2 }] } })
+
+    expect(array[0]).toBe(member)
+    expect(toRaw(array)[0]).toBe(toRaw(member))
+    expect(member.count).toBe(2)
+  })
+
+  it.each([reactive, shallowReactive])('keeps Set order and only changes its tail', (wrap) => {
+    const set = wrap(new Set<unknown>([0, NaN, 'a']))
+    const observe = vi.fn()
+    const stop = watchEffect(() => observe([...set]), { flush: 'sync' })
+    const apply = (...values: unknown[]) =>
+      restoreState({ set }, { set: { type: 'reactive', value: new Set(values) } })
+
+    try {
+      apply(-0, NaN, 'a')
+      expect(observe.mock.calls).toEqual([[[0, NaN, 'a']]])
+
+      observe.mockClear()
+      apply(0, NaN, 'a', 'b')
+      expect(observe.mock.calls).toEqual([[[0, NaN, 'a', 'b']]])
+
+      observe.mockClear()
+      apply(0, NaN)
+      expect(observe.mock.calls).toEqual([[[0, NaN, 'b']], [[0, NaN]]])
+
+      apply(NaN, 0)
+      expect([...set]).toEqual([NaN, 0])
+
+      observe.mockClear()
+      apply()
+      expect(observe.mock.calls).toEqual([[[]]])
+    } finally {
+      stop()
+    }
   })
 
   it('preserves Date, Map, and Set values through restoration', () => {
@@ -659,9 +721,9 @@ describe('state snapshots', () => {
   })
 
   it('characterizes non-composable return shapes as non-hydratable', () => {
-    expect(snapshotState(ref(1))).toEqual({})
-    expect(snapshotState(reactive({ count: 1 }))).toEqual({})
-    expect(snapshotState(() => undefined)).toEqual({})
+    expect(snapshotState(ref(1))).toBeUndefined()
+    expect(snapshotState(reactive({ count: 1 }))).toBeUndefined()
+    expect(snapshotState(() => undefined)).toBeUndefined()
   })
 
   it('ignores malformed or incompatible snapshot entries', () => {

@@ -22,6 +22,9 @@ function renderDevtoolsView(): string {
     input { width: min(280px, 42vw); }
     button { cursor: pointer; }
     main { display: grid; gap: 12px; padding: 16px; }
+    #active { display: grid; gap: 12px; }
+    #known:empty, nav[hidden] { display: none; }
+    nav { display: flex; gap: 8px; align-items: center; }
     article { border: 1px solid #2a343e; border-radius: 10px; background: #151b21; overflow: hidden; }
     article > div { padding: 12px 14px; }
     h2 { margin: 0; font-size: 15px; }
@@ -49,44 +52,80 @@ function renderDevtoolsView(): string {
     <input id="filter" type="search" placeholder="Filter active states">
     <button id="refresh" type="button">Refresh</button>
   </header>
-  <main id="states"><p class="empty">Connecting to the Nuxt app…</p></main>
+  <main>
+    <div id="active"><p class="empty">Connecting to the Nuxt app…</p></div>
+    <nav id="pagination" aria-label="Active state pages" hidden>
+      <button id="previous" type="button">Previous</button>
+      <span id="page"></span>
+      <button id="next" type="button">Next</button>
+    </nav>
+    <div id="known"></div>
+  </main>
   <script>
-    const root = document.querySelector('#states')
+    const activeRoot = document.querySelector('#active')
+    const knownRoot = document.querySelector('#known')
     const filter = document.querySelector('#filter')
-    let activeStates = []
-    let knownStates = []
-    let timer
+    const pagination = document.querySelector('#pagination')
+    const previous = document.querySelector('#previous')
+    const next = document.querySelector('#next')
+    const pageLabel = document.querySelector('#page')
+    let page = 0
+    let pages = 1
     let visible = true
     let refreshing = false
+    let previousKnown
+    let previousQuery
 
     const escapeHTML = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
-    const render = () => {
-      const query = filter.value.trim().toLowerCase()
-      const shown = activeStates.filter(state => (state.name + ' ' + state.key).toLowerCase().includes(query))
+    const search = () => filter.value.trim().toLowerCase()
+    const renderKnown = (knownStates, query) => {
+      if (knownStates === previousKnown && query === previousQuery) return
       const known = knownStates.filter(state => (state.name + ' ' + state.source + ' ' + state.origin).toLowerCase().includes(query))
-      const activeHTML = shown.length
-        ? shown.map(state => '<article><div><h2>' + escapeHTML(state.name) + '<span class="badge">' + escapeHTML(state.hydration) + '</span></h2><div class="meta">Internal hydration key: ' + escapeHTML(state.key) + '</div></div><table><thead><tr><th>Member</th><th>Kind</th><th>Value preview</th></tr></thead><tbody>' + state.members.map(member => '<tr><td>' + escapeHTML(member.name) + '</td><td>' + escapeHTML(member.kind) + '</td><td><pre>' + escapeHTML(JSON.stringify(member.value, null, 2)) + '</pre></td></tr>').join('') + '</tbody></table></article>').join('')
-        : '<p class="empty">' + (activeStates.length ? 'No matching active states.' : 'No active states yet. Opening this panel does not instantiate lazy state.') + '</p>'
-      const knownHTML = known.length
+      knownRoot.innerHTML = known.length
         ? '<article><div><h2>Known states</h2><div class="meta">Discovered statically; factories remain lazy.</div></div><table><thead><tr><th>Name</th><th>Origin</th><th>Source</th></tr></thead><tbody>' + known.map(state => '<tr><td>' + escapeHTML(state.name) + '</td><td>' + escapeHTML(state.origin) + '</td><td><pre>' + escapeHTML(state.source) + '</pre></td></tr>').join('') + '</tbody></table></article>'
         : ''
-      root.innerHTML = activeHTML + knownHTML
+      previousKnown = knownStates
+      previousQuery = query
+    }
+    const render = (active, knownStates, query) => {
+      const activeHTML = active.length
+        ? active.map(state => '<article><div><h2>' + escapeHTML(state.name) + '<span class="badge">' + escapeHTML(state.hydration) + '</span></h2><div class="meta">Internal hydration key: ' + escapeHTML(state.key) + '</div></div><table><thead><tr><th>Member</th><th>Kind</th><th>Value preview</th></tr></thead><tbody>' + state.members.map(member => '<tr><td>' + escapeHTML(member.name) + '</td><td>' + escapeHTML(member.kind) + '</td><td><pre>' + escapeHTML(JSON.stringify(member.value, null, 2)) + '</pre></td></tr>').join('') + '</tbody></table></article>').join('')
+        : '<p class="empty">' + (query ? 'No matching active states.' : 'No active states yet. Opening this panel does not instantiate lazy state.') + '</p>'
+      activeRoot.innerHTML = activeHTML
+      renderKnown(knownStates, query)
+      pagination.hidden = pages <= 1
+      previous.disabled = page === 0
+      next.disabled = page >= pages - 1
+      pageLabel.textContent = 'Page ' + (page + 1) + ' of ' + pages
     }
     const refresh = async () => {
       if (!visible || refreshing) return
       refreshing = true
+      const query = search()
+      const requestedPage = page
       try {
         const host = window.parent.__NUXT_DEVTOOLS_HOST__
         if (!host?.nuxt) throw new Error('Nuxt DevTools host is not connected.')
-        const request = { result: undefined }
+        const request = { query, page: requestedPage, result: undefined }
         await host.nuxt.callHook('nuxt-state:inspect', request)
-        activeStates = request.result?.active || []
-        knownStates = request.result?.known || []
-        render()
+        if (!visible || query !== search() || requestedPage !== page) return
+        const { active = [], known = [], total = 0, pageSize = 1 } = request.result || {}
+        pages = Math.max(1, Math.ceil(total / pageSize))
+        if (page >= pages) {
+          page = pages - 1
+          return
+        }
+        render(active, known, query)
       } catch (error) {
-        root.innerHTML = '<p class="error">' + escapeHTML(error?.message || error) + '</p>'
+        if (visible && query === search() && requestedPage === page) {
+          activeRoot.innerHTML = '<p class="error">' + escapeHTML(error?.message || error) + '</p>'
+          knownRoot.replaceChildren()
+          previousKnown = undefined
+          pagination.hidden = true
+        }
       } finally {
         refreshing = false
+        if (query !== search() || requestedPage !== page) refresh()
       }
     }
     const observer = new IntersectionObserver(entries => {
@@ -94,9 +133,11 @@ function renderDevtoolsView(): string {
       if (visible) refresh()
     })
     observer.observe(document.documentElement)
-    filter.addEventListener('input', render)
+    filter.addEventListener('input', () => { page = 0; refresh() })
+    previous.addEventListener('click', () => { if (page > 0) { page--; refresh() } })
+    next.addEventListener('click', () => { if (page + 1 < pages) { page++; refresh() } })
     document.querySelector('#refresh').addEventListener('click', refresh)
-    timer = setInterval(refresh, 1000)
+    const timer = setInterval(refresh, 1000)
     addEventListener('pagehide', () => { clearInterval(timer); observer.disconnect() }, { once: true })
     refresh()
   </script>

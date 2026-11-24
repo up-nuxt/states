@@ -15,7 +15,10 @@ export interface HydratableStateEntry {
 
 interface StateRegistry {
   active: Map<string, HydratableStateEntry>
-  hydration: Map<string, unknown>
+  hydration?: {
+    snapshots: StateHydrationPayload
+    consumed?: Set<string>
+  }
 }
 
 const registries = new WeakMap<object, StateRegistry>()
@@ -26,7 +29,6 @@ export function getStateRegistry(nuxtApp: object): StateRegistry {
   if (!registry) {
     registry = {
       active: new Map(),
-      hydration: new Map(),
     }
     registries.set(nuxtApp, registry)
   }
@@ -45,11 +47,14 @@ export function registerHydratableState(
   registry.active.set(key, entry)
 }
 
-export function collectStateSnapshots(nuxtApp: object): StateHydrationPayload {
-  const snapshots: StateHydrationPayload = {}
+export function collectStateSnapshots(nuxtApp: object): StateHydrationPayload | undefined {
+  const registry = registries.get(nuxtApp)
+  if (!registry) return
+  let snapshots: StateHydrationPayload | undefined
 
-  for (const [key, entry] of getStateRegistry(nuxtApp).active) {
-    snapshots[key] = entry.snapshot()
+  for (const [key, entry] of registry.active) {
+    const snapshot = entry.snapshot()
+    if (snapshot !== undefined) (snapshots ??= {})[key] = snapshot
   }
 
   return snapshots
@@ -59,8 +64,12 @@ export function receiveStateSnapshots(
   nuxtApp: object,
   snapshots: StateHydrationPayload | undefined,
 ): void {
+  if (!snapshots) {
+    clearPendingStateSnapshots(nuxtApp)
+    return
+  }
   const registry = getStateRegistry(nuxtApp)
-  registry.hydration = new Map(Object.entries(snapshots ?? {}))
+  registry.hydration = { snapshots }
 
   for (const [key, entry] of registry.active) {
     try {
@@ -82,12 +91,15 @@ function restorePendingSnapshot(
   key: string,
   entry: HydratableStateEntry,
 ): void {
-  if (!registry.hydration.has(key)) return
+  const hydration = registry.hydration
+  if (!hydration || hydration.consumed?.has(key) || !Object.hasOwn(hydration.snapshots, key)) return
 
-  entry.restore(registry.hydration.get(key))
-  registry.hydration.delete(key)
+  entry.restore(hydration.snapshots[key])
+  const consumed = (hydration.consumed ??= new Set())
+  consumed.add(key)
 }
 
 export function clearPendingStateSnapshots(nuxtApp: object): void {
-  getStateRegistry(nuxtApp).hydration.clear()
+  const registry = registries.get(nuxtApp)
+  if (registry) registry.hydration = undefined
 }

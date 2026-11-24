@@ -138,6 +138,22 @@ describe('defineState', () => {
     })
   })
 
+  it('omits active states without mutable snapshot members', () => {
+    const nuxtApp = {}
+    setCurrentNuxtApp(nuxtApp)
+    const useReadOnly = defineStateInternal(() => ({ label: 'ready' }), '$readOnly')
+    const useCounter = defineStateInternal(() => ({ count: ref(undefined) }), '$counter')
+
+    useReadOnly()
+    expect(collectStateSnapshots(nuxtApp)).toBeUndefined()
+
+    useCounter()
+    expect(collectStateSnapshots(nuxtApp)).toEqual({
+      $counter: { count: { type: 'ref', value: undefined } },
+    })
+    expect(getStateRegistry(nuxtApp).active.has('$readOnly')).toBe(true)
+  })
+
   it('restores a compiler-keyed state before returning it', () => {
     const nuxtApp = {}
     setCurrentNuxtApp(nuxtApp)
@@ -221,7 +237,6 @@ describe('defineState', () => {
 
       expect(dispose).toHaveBeenCalledOnce()
       expect(getStateRegistry(nuxtApp).active.has('$counter')).toBe(false)
-      expect(getStateRegistry(nuxtApp).hydration.has('$counter')).toBe(true)
       expect(useCounter().count.value).toBe(41)
       expect(useCounter().other.value).toBe(42)
       expect(attempts).toBe(2)

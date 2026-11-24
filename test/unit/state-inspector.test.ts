@@ -33,8 +33,32 @@ describe('development state inspector', () => {
 
     registerDebugState(nuxtApp, '$active', { count: ref(1) })
 
-    expect(inspectActiveStates(nuxtApp)).toHaveLength(1)
+    expect(inspectActiveStates(nuxtApp).active).toHaveLength(1)
     expect(lazyFactory).not.toHaveBeenCalled()
+  })
+
+  it('evaluates getters only for matching states on the requested page', () => {
+    const nuxtApp = {}
+    const readers = Array.from({ length: 45 }, (_, index) => vi.fn(() => index))
+    for (const [index, get] of readers.entries()) {
+      const state = Object.defineProperty({}, 'count', { enumerable: true, get })
+      registerDebugState(nuxtApp, `$${index < 42 ? 'match' : 'other'}-${index}`, state)
+    }
+
+    const { active, total, pageSize } = inspectActiveStates(nuxtApp, ' MATCH ', 1)
+
+    expect(total).toBe(42)
+    expect(active.map(({ members }) => members[0]?.value)).toEqual(
+      Array.from({ length: pageSize }, (_, index) => index + pageSize),
+    )
+    for (const [index, read] of readers.entries()) {
+      expect(read).toHaveBeenCalledTimes(Number(index >= pageSize && index < pageSize * 2))
+    }
+    expect(inspectActiveStates(nuxtApp, 'match', 2).active.map(({ key }) => key)).toEqual([
+      '$match-40',
+      '$match-41',
+    ])
+    expect(inspectActiveStates(nuxtApp, 'missing').active).toEqual([])
   })
 
   it('uses conservative public Vue member classifications', () => {
@@ -80,7 +104,7 @@ describe('development state inspector', () => {
     })
     registerDebugState(nuxtApp, '$unusual', unusual)
 
-    expect(inspectActiveStates(nuxtApp)[0]?.members).toEqual([
+    expect(inspectActiveStates(nuxtApp).active[0]?.members).toEqual([
       {
         name: 'broken',
         kind: 'unavailable',
@@ -157,9 +181,9 @@ describe('development state inspector', () => {
     const count = ref(1)
     registerDebugState(nuxtApp, '$counter', { count })
 
-    expect(inspectActiveStates(nuxtApp)[0]?.members[0]?.value).toBe(1)
+    expect(inspectActiveStates(nuxtApp).active[0]?.members[0]?.value).toBe(1)
     count.value = 2
-    expect(inspectActiveStates(nuxtApp)[0]?.members[0]?.value).toBe(2)
+    expect(inspectActiveStates(nuxtApp).active[0]?.members[0]?.value).toBe(2)
   })
 
   it('replaces HMR entries instead of retaining stale state cards', () => {
@@ -167,7 +191,7 @@ describe('development state inspector', () => {
     registerDebugState(nuxtApp, '$counter', { count: ref(1) })
     registerDebugState(nuxtApp, '$counter', { count: ref(2) })
 
-    const inspected = inspectActiveStates(nuxtApp)
+    const inspected = inspectActiveStates(nuxtApp).active
     expect(inspected).toHaveLength(1)
     expect(inspected[0]?.members[0]?.value).toBe(2)
   })
@@ -178,7 +202,9 @@ describe('development state inspector', () => {
     registerDebugState(nuxtApp, '$hydrated', { count: ref(1) })
     registerDebugState(nuxtApp, '$client', { count: ref(0) })
 
-    expect(inspectActiveStates(nuxtApp).map(({ key, hydration }) => [key, hydration])).toEqual([
+    expect(
+      inspectActiveStates(nuxtApp).active.map(({ key, hydration }) => [key, hydration]),
+    ).toEqual([
       ['$hydrated', 'Hydrated'],
       ['$client', 'Client-only'],
     ])

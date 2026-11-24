@@ -65,15 +65,18 @@ type StateSnapshot = Record<
 ```
 
 Readonly values, functions, and plain runtime members are recreated instead of serialized.
-Matched snapshots are consumed after a successful restore. Unmatched snapshots are cleared after
-mounting so HMR cannot replay the original server state.
+States with no mutable members are omitted from the payload. The client looks up snapshots by
+state key and marks each one consumed after a successful restore. It clears pending snapshots
+after mounting so HMR cannot replay the original server state.
 
 ## Restore behavior
 
 Classification uses public Vue APIs. Standard and shallow refs/reactives are supported;
 readonly values are skipped. Ref restoration assigns `.value`, while reactive roots are
-patched without replacing the proxy. Returned reactive `Map` and `Set` members are
-repopulated in place, including shared references in entries.
+patched without replacing the proxy. Sparse arrays preserve their holes and length. Returned
+reactive `Map` and `Set` members preserve their identity, entry order, and shared references.
+For a `Set` with a matching prefix and a small tail change, hydration skips the prefix and updates
+only the tail.
 
 The patcher reuses compatible client arrays and plain objects, reconnects shared references
 and cycles, and splits nested client aliases when the server supplied distinct objects. Returned
@@ -144,7 +147,8 @@ fallback label.
 
 Preview generation limits depth, item count, node count, and string length; represents cycles,
 shared references, collections, and functions safely; and contains getter/proxy errors. The view
-polls at most once per second while visible and installs no deep watcher.
+polls once per second while visible and installs no deep watcher. It filters active entries by
+name or key and generates member previews only for the current page of up to 20 states.
 
 All registration, UI, metadata, inspector imports, and debug references are gated by development
 mode. Production builds contain no DevTools route, polling, bridge, or inspector code.

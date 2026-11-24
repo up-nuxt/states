@@ -1,10 +1,11 @@
 import { defineNuxtPlugin } from '#app'
 import knownStates from '#build/nuxt-state/metadata'
-import { inspectActiveStates, type StateInspectorEntry } from '../state-inspector'
+import { inspectActiveStates, type StateInspectorPage } from '../state-inspector'
 
 interface InspectorRequest {
-  result?: {
-    active: StateInspectorEntry[]
+  query?: string
+  page?: number
+  result?: StateInspectorPage & {
     known: Array<{ name: string; source: string; origin: string }>
   }
 }
@@ -16,7 +17,7 @@ export default defineNuxtPlugin({
       'nuxt-state:inspect' as never,
       ((request: InspectorRequest) => {
         request.result = {
-          active: inspectActiveStates(nuxtApp),
+          ...inspectActiveStates(nuxtApp, request.query, request.page),
           known: knownStates,
         }
       }) as never,
