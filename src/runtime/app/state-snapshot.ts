@@ -91,14 +91,59 @@ function patchArray(
   for (let position = 0; position < keyCount; position++) {
     const key = keys[position]!
     if (!dense && !isArrayIndex(key, length)) continue
-    const index = Number(key)
+    const index = dense ? position : Number(key)
     const value = resolve(source[index])
-    const current = raw === target ? undefined : Object.getOwnPropertyDescriptor(raw, key)
+    const current =
+      raw === target || index >= raw.length ? undefined : Object.getOwnPropertyDescriptor(raw, key)
     if (!current?.writable || !Object.is(current.value, reactiveStoredValue(value, shallow))) {
       target[index] = value
     }
   }
   if (raw.length !== length) target.length = length
+}
+
+// A lone binding can reuse its payload members when no descendant points back to it.
+// Defer nested Map and Set traversal to the general graph resolver.
+function pointsToRoot(root: object): boolean {
+  const seen = new Set<object>([root])
+  const scan = [root]
+  let found = false
+
+  function visit(value: unknown): void {
+    if (found || !isTrackableObject(value)) return
+    const raw = toRaw(value)
+    if (raw === root) found = true
+    else if (!seen.has(raw)) {
+      seen.add(raw)
+      scan.push(raw)
+    }
+  }
+
+  for (const source of scan) {
+    if (source instanceof Map || source instanceof Set) return true
+    if (Array.isArray(source)) {
+      const length = source.length
+      if (length <= 32) {
+        for (let i = 0; i < length && !found; i++) {
+          if (Object.hasOwn(source, i)) visit(source[i])
+        }
+      } else {
+        const keys = Object.getOwnPropertyNames(source)
+        const dense = keys[length] === 'length'
+        for (let i = 0; i < (dense ? length : keys.length) && !found; i++) {
+          const key = keys[i]!
+          if (dense || isArrayIndex(key, length)) visit(source[dense ? i : Number(key)])
+        }
+      }
+    } else if (isPlainRecord(source) && !isRef(source)) {
+      for (const key of Object.keys(source)) {
+        visit(source[key])
+        if (found) break
+      }
+    }
+    if (found) return true
+  }
+  return false
 }
 
 function patchMap(
@@ -348,9 +393,12 @@ export function restoreState(state: unknown, snapshot: unknown): void {
   const rootBindings = duplicateRoots.length ? new Map(bindings) : undefined
   for (const [source, target] of bindings) {
     const array = Array.isArray(source)
+    const emptyTarget =
+      array && Array.isArray(target) && toRaw(target).length === 0 ? toRaw(target) : undefined
     const keys = array ? Object.getOwnPropertyNames(source) : Object.keys(source)
     for (const key of keys) {
       if (array && !isArrayIndex(key, source.length)) continue
+      if (emptyTarget && !(key in emptyTarget)) continue
       const value = (source as Record<string, unknown>)[key]
       if (!isTrackableObject(value)) continue
       const raw = toRaw(value)
@@ -364,6 +412,15 @@ export function restoreState(state: unknown, snapshot: unknown): void {
         !Object.isFrozen(toRaw(current))
       ) {
         claim(current, raw)
+      }
+    }
+  }
+
+  if (bindings.size === 1 && refs.length === 0 && !rootBindings) {
+    for (const [source, target] of bindings) {
+      if (Array.isArray(source) && !pointsToRoot(source)) {
+        writeGraph(target, source, (value) => value)
+        return
       }
     }
   }

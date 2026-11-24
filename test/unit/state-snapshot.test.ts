@@ -296,6 +296,33 @@ describe('state snapshots', () => {
     expect(member.count).toBe(2)
   })
 
+  it('reuses payload branches when a lone array root has no incoming references', () => {
+    const shared: { self?: unknown } = {}
+    shared.self = shared
+    const source = [{ shared }, { shared }]
+    const rows = shallowReactive<unknown[]>([])
+
+    restoreState({ rows }, { rows: { type: 'reactive', value: source } })
+
+    expect(rows[0]).toBe(source[0])
+    expect(rows[1]).toBe(source[1])
+    expect(source[0]?.shared.self).toBe(shared)
+  })
+
+  it('reconnects a lone array root through a nested collection', () => {
+    const rows = shallowReactive<unknown[]>([])
+    const source: unknown[] = []
+    const back = new Map([['rows', source]])
+    source.push({ back })
+
+    restoreState({ rows }, { rows: { type: 'reactive', value: source } })
+
+    expect(rows[0]).toEqual({ back: expect.any(Map) })
+    const restored = rows[0] as { back: Map<string, unknown[]> }
+    expect(restored.back.get('rows')).toBe(rows)
+    expect(back.get('rows')).toBe(source)
+  })
+
   it.each([reactive, shallowReactive])(
     'keeps arrays stable and notifies only for changed slots',
     (wrap) => {
