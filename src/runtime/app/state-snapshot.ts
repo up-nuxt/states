@@ -81,43 +81,59 @@ function writeGraph(target: object, source: object, resolve: (value: unknown) =>
   }
 }
 
-function* graphChildren(value: object): Iterable<unknown> {
-  if (value instanceof Map) {
-    for (const [key, child] of value) {
-      yield key
-      yield child
-    }
-  } else if (value instanceof Set) {
-    yield* value
-  } else if (Array.isArray(value) || (isPlainRecord(value) && !isRef(value))) {
-    yield* Object.values(value)
-  }
-}
-
 // Preserve payload objects shared with Nuxt data unless an edge needs to point
-// to a reused client object. Work backwards from reused nodes to find those edges.
+// to a reused client object. Keep one predecessor per node and store extra
+// edges only at joins, so unrelated trees do not allocate a Set for each node.
 function createGraphResolver(bindings: Map<object, object>, roots: unknown[]) {
-  const parents = new Map<object, Set<object>>()
-  const visited = new Set<object>()
-  const scan = [...roots]
-  for (const value of scan) {
+  const parents = new Map<object, object | null>()
+  const extraParents = new Map<object, object[]>()
+  const scan: object[] = []
+
+  for (const value of roots) {
     if (!isTrackableObject(value)) continue
-    const source = toRaw(value)
-    if (visited.has(source)) continue
-    visited.add(source)
-    for (const child of graphChildren(source)) {
-      if (!isTrackableObject(child)) continue
-      const raw = toRaw(child)
-      let incoming = parents.get(raw)
-      if (!incoming) parents.set(raw, (incoming = new Set()))
-      incoming.add(source)
-      scan.push(raw)
+    const root = toRaw(value)
+    if (parents.has(root)) continue
+    parents.set(root, null)
+    scan.push(root)
+  }
+
+  let parent: object
+  function visit(value: unknown): void {
+    if (!isTrackableObject(value)) return
+    const child = toRaw(value)
+    const firstParent = parents.get(child)
+    if (firstParent === undefined) {
+      parents.set(child, parent)
+      scan.push(child)
+    } else if (firstParent !== parent && child !== parent) {
+      const additional = extraParents.get(child)
+      if (additional) additional.push(parent)
+      else extraParents.set(child, [parent])
+    }
+  }
+
+  function visitMapEntry(value: unknown, key: unknown): void {
+    visit(key)
+    visit(value)
+  }
+
+  for (const source of scan) {
+    parent = source
+    if (source instanceof Map) source.forEach(visitMapEntry)
+    else if (source instanceof Set) source.forEach(visit)
+    else if (Array.isArray(source) || (isPlainRecord(source) && !isRef(source))) {
+      for (const key in source) {
+        if (Object.hasOwn(source, key)) visit((source as Record<string, unknown>)[key])
+      }
     }
   }
 
   const affected = new Set(bindings.keys())
   for (const source of affected) {
-    for (const parent of parents.get(source) ?? []) affected.add(parent)
+    const firstParent = parents.get(source)
+    if (firstParent) affected.add(firstParent)
+    const additional = extraParents.get(source)
+    if (additional) for (const other of additional) affected.add(other)
   }
 
   function resolve(value: unknown): unknown {
@@ -199,6 +215,7 @@ export function restoreState(state: unknown, snapshot: unknown): void {
     return
   }
 
+  const rootBindings = duplicateRoots.length ? new Map(bindings) : undefined
   for (const [source, target] of bindings) {
     for (const [key, value] of Object.entries(source)) {
       const current = (target as Record<string, unknown>)[key]
@@ -217,6 +234,11 @@ export function restoreState(state: unknown, snapshot: unknown): void {
   ])
 
   for (const [source, target] of reactiveBindings) writeGraph(target, source, resolve)
-  for (const [source, target] of duplicateRoots) writeGraph(target, source, resolve)
+  for (const [source, target] of duplicateRoots) {
+    // Give this root its own back-references, while retaining other explicit roots.
+    const localBindings = new Map(rootBindings)
+    localBindings.set(source, target)
+    writeGraph(target, source, createGraphResolver(localBindings, [source]))
+  }
   for (const { target, value } of refs) target.value = resolve(value)
 }

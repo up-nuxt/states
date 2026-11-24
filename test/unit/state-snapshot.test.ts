@@ -385,6 +385,61 @@ describe('state snapshots', () => {
     expect([state.first.value, state.second.value]).toEqual([1, 2])
   })
 
+  it('keeps duplicate reactive roots distinct and restores each root’s own cycles', () => {
+    interface Root {
+      self?: Root
+      nested?: { owner: Root }
+    }
+    const first = reactive<Root>({})
+    const second = reactive<Root>({})
+    const external = ref<Root>()
+    const source: Root = {}
+    source.self = source
+    source.nested = { owner: source }
+
+    restoreState(
+      { first, second, external },
+      {
+        first: { type: 'reactive', value: source },
+        second: { type: 'reactive', value: source },
+        external: { type: 'ref', value: source },
+      },
+    )
+
+    expect(first).not.toBe(second)
+    expect(first.self).toBe(first)
+    expect(first.nested?.owner).toBe(first)
+    expect(second.self).toBe(second)
+    expect(second.nested?.owner).toBe(second)
+    expect(external.value).toBe(first)
+  })
+
+  it('restores self-references in duplicate Map and Set roots', () => {
+    const firstMap = reactive(new Map<unknown, unknown>())
+    const secondMap = reactive(new Map<unknown, unknown>())
+    const firstSet = reactive(new Set<unknown>())
+    const secondSet = reactive(new Set<unknown>())
+    const map = new Map<unknown, unknown>()
+    const set = new Set<unknown>()
+    map.set(map, map)
+    set.add(set)
+
+    restoreState(
+      { firstMap, secondMap, firstSet, secondSet },
+      {
+        firstMap: { type: 'reactive', value: map },
+        secondMap: { type: 'reactive', value: map },
+        firstSet: { type: 'reactive', value: set },
+        secondSet: { type: 'reactive', value: set },
+      },
+    )
+
+    expect(firstMap.get(firstMap)).toBe(firstMap)
+    expect(secondMap.get(secondMap)).toBe(secondMap)
+    expect([...firstSet][0]).toBe(firstSet)
+    expect([...secondSet][0]).toBe(secondSet)
+  })
+
   it('relinks new branches and cycles without modifying the payload graph', () => {
     const user = reactive({ name: 'Client' })
     const detail = ref<{ people: Map<{ name: string }, unknown> }>()

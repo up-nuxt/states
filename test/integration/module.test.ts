@@ -1,5 +1,6 @@
+import { get } from 'node:http'
 import { fileURLToPath } from 'node:url'
-import { $fetch, fetch, setup } from '@nuxt/test-utils/e2e'
+import { $fetch, fetch, setup, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 
 describe('nuxt-state module', async () => {
@@ -64,6 +65,33 @@ describe('nuxt-state module', async () => {
     expect(html).toContain('<output id="user-name">Server User</output>')
     expect(html).toContain('__nuxt_state__')
   })
+
+  it.each([false, true])(
+    'disposes an aborted SSR request exactly once (error: %s)',
+    async (fail) => {
+      const marker = fail ? 'aborted-error-probe' : 'aborted-render-probe'
+      const check = `/?scope-check=${marker}`
+      const request = get(url(`/?scope-cleanup=${marker}&abort${fail ? '&fail' : ''}`))
+      request.on('error', () => {})
+
+      try {
+        await expect
+          .poll(() => $fetch<string>(check))
+          .toContain(`scope-disposals:0,scope-changes:0,scope-phase:${fail ? 'error' : 'waiting'}`)
+        request.destroy()
+        await expect
+          .poll(() => $fetch<string>(check))
+          .toContain('scope-disposals:1,scope-changes:0')
+        await $fetch(`${check}&release`)
+        await expect
+          .poll(() => $fetch<string>(check))
+          .toContain('scope-disposals:1,scope-changes:0,scope-phase:resumed')
+      } finally {
+        request.destroy()
+        await $fetch(`${check}&release&remove`)
+      }
+    },
+  )
 
   it('keeps useFetch state isolated between concurrent SSR requests', async () => {
     const [first, second] = await Promise.all([

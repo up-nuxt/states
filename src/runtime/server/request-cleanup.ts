@@ -2,16 +2,16 @@ import type { NitroAppPlugin } from 'nitropack/types'
 import { disposeRequestStates } from '../shared/request-cleanup'
 
 const cleanup: NitroAppPlugin = (nitroApp) => {
-  const observedResponses = new WeakSet<object>()
   nitroApp.hooks.hook('afterResponse', (event) => disposeRequestStates(event.context))
 
-  // Nitro's error handler can end the response before H3 calls afterResponse.
-  nitroApp.hooks.hook('error', (_error, { event } = {}) => {
-    const response = event?.node?.res
-    if (!event || !response || response.writableFinished || observedResponses.has(response)) return
+  // An error handler or aborted connection can bypass afterResponse.
+  nitroApp.hooks.hook('request', (event) => {
+    const response = event.node?.res
+    if (!response?.once) return
 
-    observedResponses.add(response)
-    response.once('finish', () => {
+    function dispose(): void {
+      response.removeListener('finish', dispose)
+      response.removeListener('close', dispose)
       try {
         disposeRequestStates(event.context)
       } catch (error) {
@@ -22,7 +22,13 @@ const cleanup: NitroAppPlugin = (nitroApp) => {
           { event, tags: ['state-disposal'] },
         )
       }
-    })
+    }
+
+    if (response.writableFinished || response.destroyed) dispose()
+    else {
+      response.once('finish', dispose)
+      response.once('close', dispose)
+    }
   })
 }
 

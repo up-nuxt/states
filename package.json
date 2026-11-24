@@ -44,6 +44,7 @@
     "access": "public"
   },
   "scripts": {
+    "bench:restore": "node benchmarks/state-restore/run.mjs",
     "bench:bundle-size": "pnpm run prepack && node benchmarks/bundle-size/run.mjs",
     "prepack": "nuxt-module-build build",
     "dev": "pnpm dev:prepare && nuxt dev playground",

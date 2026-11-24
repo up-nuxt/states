@@ -48,7 +48,7 @@ export function defineState<T>(factory: () => T & NotPromise<T>, internalKey?: s
       instances.set(nuxtApp, instance)
       if (import.meta.server) {
         const event = useRequestEvent(nuxtApp)
-        if (event) registerRequestCleanup(event.context, dispose)
+        if (event) registerRequestCleanup(event.context, () => scope.stop())
       } else {
         const app = nuxtApp as { vueApp?: { onUnmount?: (cleanup: () => void) => void } }
         app.vueApp?.onUnmount?.(dispose)

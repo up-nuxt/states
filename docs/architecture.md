@@ -14,8 +14,9 @@ implementation details and are not public API.
 Each `defineState` call owns a `WeakMap<NuxtApp, Instance>`. The factory runs lazily in a
 detached Vue effect scope and its exact result is reused within that app. This provides SSR
 request isolation while allowing discarded applications to be garbage-collected. The scope
-stops on Vue app unmount in the browser and after the Nitro response on the server. The server
-keeps scopes active through payload serialization.
+stops on Vue app unmount in the browser and when Nitro completes or closes a response on the
+server. Scopes remain active through payload serialization for completed responses. A scope
+created after a connection closes is stopped immediately.
 
 A second weak map holds per-app hydration records:
 
@@ -76,8 +77,10 @@ repopulated in place, including shared references in entries.
 
 The patcher reuses compatible client arrays and plain objects, reconnects shared references
 and cycles, and splits nested client aliases when the server supplied distinct objects. Returned
-reactive roots retain their factory identity. Distinct returned roots therefore remain distinct
-even if the payload aliases them. Payload values shared with Nuxt's data cache are reused when
+reactive roots retain their factory identity. When distinct returned roots share one payload
+object, each root gets its own self-references, including back-references through nested containers.
+References from other state members to that payload object resolve to the first compatible
+reactive root in snapshot order. Payload values shared with Nuxt's data cache are reused when
 their references need no rewriting. Nuxt remains the only serializer.
 
 Writable computed refs look like mutable refs through Vue's public APIs. Restoring one invokes

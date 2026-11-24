@@ -1,10 +1,16 @@
 const source = shallowRef(0)
-const results = new Map<string, { disposals: number; changes: number }>()
+interface Probe {
+  disposals: number
+  changes: number
+  phase: 'created' | 'waiting' | 'error' | 'resumed'
+  release?: () => void
+}
+const results = new Map<string, Probe>()
 
 const useScopeCleanup = defineState(() => {
   const { searchParams } = useRequestURL()
   const marker = searchParams.get('scope-cleanup')!
-  const result = { disposals: 0, changes: 0 }
+  const result: Probe = { disposals: 0, changes: 0, phase: 'created' }
   const snapshot = reactive({ marker })
   results.set(marker, result)
 
@@ -17,7 +23,19 @@ const useScopeCleanup = defineState(() => {
   return { snapshot }
 })
 
-export default defineNuxtPlugin(() => {
+async function waitForAbort(result: Probe, phase: 'waiting' | 'error'): Promise<void> {
+  result.phase = phase
+  await new Promise<void>((resolve) => {
+    const deadline = setTimeout(resolve, 5_000)
+    result.release = () => {
+      clearTimeout(deadline)
+      resolve()
+    }
+  })
+  result.phase = 'resumed'
+}
+
+export default defineNuxtPlugin(async (nuxtApp) => {
   const url = useRequestURL()
   if (url.pathname !== '/') return
 
@@ -26,16 +44,27 @@ export default defineNuxtPlugin(() => {
     const result = results.get(check)
     if (result?.disposals) {
       source.value++
-      results.delete(check)
+      if (result.phase === 'created' || url.searchParams.has('remove')) results.delete(check)
     }
+    if (url.searchParams.has('release')) result?.release?.()
     useState(
       'scope-check',
-      () => `scope-disposals:${result?.disposals},scope-changes:${result?.changes}`,
+      () =>
+        `scope-disposals:${result?.disposals},scope-changes:${result?.changes},scope-phase:${result?.phase}`,
     )
   }
 
-  if (url.searchParams.has('scope-cleanup')) {
+  const marker = url.searchParams.get('scope-cleanup')
+  if (marker) {
     useScopeCleanup()
+    const result = results.get(marker)!
+    if (url.searchParams.has('abort')) {
+      if (url.searchParams.has('fail')) {
+        nuxtApp.hooks.hookOnce('app:error', () => waitForAbort(result, 'error'))
+      } else {
+        await waitForAbort(result, 'waiting')
+      }
+    }
     if (url.searchParams.has('fail'))
       throw createError({ statusCode: 503, statusMessage: 'Scope probe' })
   }
