@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.2
+
+- Validate hydration, DevTools, and SSR request cleanup on Nuxt 4.7 and Nitro 2.14.
+- Serve the DevTools inspector with a standard Web `Response` and document how to install
+  DevTools v4 on Nuxt 4.7.
+- Speed up hydration of reactive arrays by reusing payload members when they do not point back
+  to the array root. Add a repeatable benchmark against Pinia with 20,000 nested records.
+
 ## 1.1.1
 
 - Dispose SSR state scopes when Node responses finish or close, including errors and aborted
