@@ -73,8 +73,9 @@ layers override lower-priority ones.
 
 With [Nuxt DevTools v4](https://nuxt.com/modules/devtools/upgrading-to-v4#nuxt-45) enabled,
 open **Nuxt States** in the **Nuxt** group of Vite DevTools. The development-only inspector
-requires Nuxt 4.6 or later with Vite 8. Nuxt 4 apps can select DevTools v4 with a package-manager
-override. The dock badge shows the number of discovered state exports.
+requires Nuxt 4.6 or later with Vite 8. On Nuxt 4.7 and later, install `@nuxt/devtools` v4 as a
+development dependency (`pnpm add -D @nuxt/devtools@^4`). On Nuxt 4.6, use a package-manager
+override to select v4. The dock badge shows the number of discovered state exports.
 
 The inspector provides read-only views of active states and discovered state exports. It shows
 hydration status, safe bounded value previews, source paths, and layer origins without executing

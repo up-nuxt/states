@@ -131,6 +131,7 @@ describe('development hydration', async () => {
 
     const view = await page.request.get(url('/__nuxt_state_devtools__/'))
     expect(view.status()).toBe(200)
+    expect(view.headers()['content-type']).toMatch(/^text\/html\b/i)
     expect(await view.text()).toContain('Read only')
 
     await page.goto(url('/private-state'), { waitUntil: 'hydration' })

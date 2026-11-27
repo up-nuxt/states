@@ -4,7 +4,7 @@ The dependency update moved `@nuxt/devtools-kit` and the root workspace dev depe
 
 ## Compatibility
 
-The inspector requires DevTools v4 and Nuxt 4.6+ with Vite 8. DevTools v4 itself can run starting with Nuxt 4.5 and Vite 8.1.5, while the portable inspector route uses the server API introduced in Nuxt 4.6. It appears in the Nuxt group of Vite DevTools. The lockfile has both the explicit DevTools 4.2.0 and the DevTools 3.4.4 bundled with Nuxt 4.6.4. Downstream Nuxt 4 apps can select v4 with the documented package-manager override. On v3, `devtools:ready` never fires and a v4-only inspector will be absent. This is a requirement of the inspector. The core module currently advertises Nuxt `^4.0.0` support. [Lockfile](../pnpm-lock.yaml) · [Module compatibility](../src/module.ts) · [Upgrade guide](https://nuxt.com/modules/devtools/upgrading-to-v4#nuxt-45) · [Module migration](https://nuxt.com/modules/devtools/module-migration#should-i-migrate-now)
+The inspector requires DevTools v4 and Nuxt 4.6+ with Vite 8. Its dock appears in the Nuxt group of Vite DevTools. Nuxt 4.6 apps can select v4 with a package-manager override. Nuxt 4.7 ships DevTools onboarding, so apps can install `@nuxt/devtools` v4 directly as a development dependency. The core module advertises Nuxt `^4.0.0` support. [Nuxt 4.7 release](https://github.com/nuxt/nuxt/releases/tag/v4.7.0) · [Upgrade guide](https://nuxt.com/modules/devtools/upgrading-to-v4#nuxt-45)
 
 ## Native dock
 
@@ -18,7 +18,14 @@ The inspector requires DevTools v4 and Nuxt 4.6+ with Vite 8. DevTools v4 itself
 
 ## Nuxt Kit 4.6
 
-`@nuxt/kit` and the development versions of Nuxt and `@nuxt/schema` moved from `^4.5.2` to `^4.6.4`. Nuxt 4.6 gives Kit an explicit public API and reduces its dependency footprint. The installed `nuxt/kit` subpath re-exports `@nuxt/kit`. The existing module entry already uses public Kit helpers for layer directories, imports, plugins, templates, and the dev route. Keep the current import while the module supports earlier Nuxt 4 versions. [Module entry](../src/module.ts) · [Nuxt 4.6 release](https://github.com/nuxt/nuxt/releases/tag/v4.6.0)
+Nuxt 4.6 introduced the portable handler registration and made Kit's public API explicit. The module uses public Kit helpers for layer directories, imports, plugins, templates, and the dev route. It keeps a direct dependency on `@nuxt/kit` so the module can resolve these helpers with earlier Nuxt 4 hosts. [Module entry](../src/module.ts) · [Nuxt 4.6 release](https://github.com/nuxt/nuxt/releases/tag/v4.6.0)
 
-- The inspector route uses `nuxt/server` and is registered as the portable `nuxt` variant of `addDevServerHandler`. This requires Nuxt 4.6+. [Server compatibility in Nuxt 4.6](https://github.com/nuxt/nuxt/releases/tag/v4.6.0#-for-module-authors)
+- The inspector returns a Web `Response` through the portable `nuxt` variant of `addDevServerHandler`. That route runs in the Nuxt module process, so its handler uses Web APIs directly. [Dev server handler compatibility](https://nuxt.com/docs/4.x/guide/modules/server-compatibility#dev-server-handlers)
 - The `addTemplate` option `dependsOn` scopes regeneration of `nuxt-state/metadata.mjs` on file edits to the discovered state directories. Its contents derive from `imports:extend` and can change when a state export is renamed within an existing file. [Template dependencies](https://nuxt.com/docs/4.x/api/kit/templates#skipping-regeneration-in-development)
+
+## Nuxt 4.7 validation
+
+The development and playground dependencies resolve Nuxt 4.7.0 with Nitro 2.14.0. Use Node
+24.15+ within the Node 24 line, or Node 26, when running this checkout with Nuxt 4.7.
+The Node response cleanup plugin uses the Nitro 2 request and response hooks. The preview
+Nitro 3 runtime in Nuxt 4.7 is outside this validation.

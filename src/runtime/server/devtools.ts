@@ -1,9 +1,8 @@
-import { defineEventHandler } from 'nuxt/server'
-
-export default defineEventHandler((event) => {
-  event.res.headers.set('content-type', 'text/html; charset=utf-8')
-  return renderDevtoolsView()
-})
+export default function serveDevtoolsView(): Response {
+  return new Response(renderDevtoolsView(), {
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  })
+}
 
 function renderDevtoolsView(): string {
   return `<!doctype html>

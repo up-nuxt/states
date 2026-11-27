@@ -142,7 +142,7 @@ concurrency, and HMR cases.
 In development on Nuxt 4.6 or later, the module registers an iframe dock in the Nuxt group of
 DevTools v4. The iframe calls the inspection hook on the same-origin Nuxt app in its parent
 window. The hook queries the existing per-app registry and returns read-only previews.
-The dev-only route serves the iframe HTML through the portable `nuxt/server` API.
+The dev-only route uses Nuxt Kit's portable handler registration and returns a Web `Response`.
 
 Active entries show hydration status and bounded member previews. Static auto-import metadata
 lists export names, source paths, and layer origins. The dock badge counts discovered exports.
